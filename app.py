@@ -1,19 +1,22 @@
 # ============================================================
 # 🤖 ML Playground - Streamlit App
-# Regresi & Klasifikasi + Database MongoDB & Retrain
+# Regresi, Klasifikasi, Clustering + MongoDB (Retrain & Komentar)
 # ============================================================
 
-import streamlit as st
-import pandas as pd
-import numpy as np
+import re
+from datetime import datetime, timedelta, timezone
+
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import seaborn as sns
-from datetime import datetime
+import streamlit as st
 
 from sklearn import datasets
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
+from sklearn.decomposition import PCA
 
 # Model regresi
 from sklearn.linear_model import LinearRegression, Ridge, Lasso, LogisticRegression
@@ -22,12 +25,17 @@ from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 # Model klasifikasi
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
+# Model clustering
+from sklearn.cluster import KMeans, AgglomerativeClustering, DBSCAN
+from sklearn.mixture import GaussianMixture
 
 # Metrik evaluasi
 from sklearn.metrics import (
     mean_absolute_error, mean_squared_error, r2_score,
     accuracy_score, precision_score, recall_score, f1_score,
     confusion_matrix, classification_report,
+    silhouette_score, davies_bouldin_score, calinski_harabasz_score,
+    adjusted_rand_score,
 )
 
 # MongoDB
@@ -84,12 +92,23 @@ DATASET_KLASIFIKASI = {
     "🎗️ Breast Cancer": datasets.load_breast_cancer,
     "🔢 Digits": datasets.load_digits,
 }
+DATASET_CLUSTERING = {
+    "🌺 Iris": datasets.load_iris,
+    "🍷 Wine": datasets.load_wine,
+    "🎗️ Breast Cancer": datasets.load_breast_cancer,
+}
+
+MODEL_REGRESI = ["Linear Regression", "Ridge", "Lasso", "Decision Tree", "Random Forest"]
+MODEL_KLASIFIKASI = ["Logistic Regression", "KNN", "Decision Tree", "Random Forest", "SVM"]
+MODEL_CLUSTERING = ["KMeans", "Agglomerative", "DBSCAN", "Gaussian Mixture"]
 
 NAMA_DB = "test_db"
 NAMA_COLLECTION = "iris_db"
+NAMA_COLLECTION_KOMENTAR = "komentar"
 FITUR_IRIS = ["sepal_length", "sepal_width", "petal_length", "petal_width"]
 SPECIES_MAP = {"setosa": 0, "versicolor": 1, "virginica": 2}  # string -> integer
 SPECIES_LIST = list(SPECIES_MAP.keys())
+WIB = timedelta(hours=7)  # selisih UTC -> WIB untuk tampilan komentar
 
 
 def buat_model(tugas: str, nama: str, random_state: int):
@@ -115,13 +134,29 @@ def buat_model(tugas: str, nama: str, random_state: int):
     return peta[nama]
 
 
+def buat_model_cluster(nama: str, k: int, eps: float, min_samples: int, random_state: int):
+    """Membuat model clustering sesuai pilihan dan parameternya."""
+    if nama == "KMeans":
+        return KMeans(n_clusters=k, n_init=10, random_state=random_state)
+    if nama == "Agglomerative":
+        return AgglomerativeClustering(n_clusters=k)
+    if nama == "DBSCAN":
+        return DBSCAN(eps=eps, min_samples=min_samples)
+    return GaussianMixture(n_components=k, random_state=random_state)
+
+
 # ------------------------------------------------------------
 # 💾 Cache pemuatan dataset
 # ------------------------------------------------------------
 @st.cache_data(show_spinner=False)
 def muat_dataset(tugas: str, nama: str):
     """Memuat dataset toy dan mengembalikan X (DataFrame), y (Series), nama kelas."""
-    loader = (DATASET_REGRESI if tugas == "Regresi" else DATASET_KLASIFIKASI)[nama]
+    if tugas == "Regresi":
+        loader = DATASET_REGRESI[nama]
+    elif tugas == "Klasifikasi":
+        loader = DATASET_KLASIFIKASI[nama]
+    else:
+        loader = DATASET_CLUSTERING[nama]
     data = loader()
     X = pd.DataFrame(data.data, columns=data.feature_names)
 
@@ -131,7 +166,8 @@ def muat_dataset(tugas: str, nama: str):
     else:
         y = pd.Series(data.target, name="target")
 
-    kelas = list(data.target_names) if (tugas == "Klasifikasi" and hasattr(data, "target_names")) else None
+    punya_kelas = tugas in ("Klasifikasi", "Clustering") and hasattr(data, "target_names")
+    kelas = list(data.target_names) if punya_kelas else None
     return X, y, kelas
 
 
@@ -147,14 +183,42 @@ def get_mongo_client():
     return client
 
 
+def cek_koneksi() -> bool:
+    """Memeriksa koneksi MongoDB; menampilkan pesan error yang jelas bila gagal."""
+    try:
+        get_mongo_client()
+        return True
+    except KeyError:
+        st.error(
+            "🔑 `MONGODB_URI` tidak ditemukan di `st.secrets`. "
+            "Buat file `.streamlit/secrets.toml` (lokal) atau isi menu Secrets (Streamlit Cloud):\n\n"
+            '```toml\nMONGODB_URI = "mongodb+srv://user:password@cluster.mongodb.net/"\n```'
+        )
+    except PyMongoError as e:
+        st.error(
+            "🔌 Gagal terhubung ke MongoDB. Periksa URI, username/password, "
+            "dan whitelist IP di MongoDB Atlas."
+        )
+        st.caption(f"Detail error: {e}")
+        get_mongo_client.clear()  # hapus cache koneksi gagal agar bisa dicoba lagi
+    except Exception as e:
+        st.error(f"⚠️ Terjadi kesalahan tak terduga saat koneksi: {e}")
+    return False
+
+
 def get_collection():
     """Mengambil collection iris_db dari database test_db."""
     return get_mongo_client()[NAMA_DB][NAMA_COLLECTION]
 
 
+def get_collection_komentar():
+    """Mengambil collection komentar dari database test_db."""
+    return get_mongo_client()[NAMA_DB][NAMA_COLLECTION_KOMENTAR]
+
+
 @st.cache_data(ttl=5, show_spinner=False)
 def ambil_data_mongo() -> pd.DataFrame:
-    """Mengambil seluruh dokumen dari MongoDB (cache 5 detik)."""
+    """Mengambil seluruh dokumen Iris dari MongoDB (cache 5 detik)."""
     dokumen = list(get_collection().find().sort("timestamp", -1))
     if not dokumen:
         return pd.DataFrame(columns=["_id"] + FITUR_IRIS + ["species", "timestamp"])
@@ -163,9 +227,26 @@ def ambil_data_mongo() -> pd.DataFrame:
     return df
 
 
+@st.cache_data(ttl=5, show_spinner=False)
+def ambil_komentar(batas: int = 100) -> list:
+    """Mengambil komentar terbaru dari MongoDB (cache 5 detik)."""
+    dokumen = get_collection_komentar().find().sort("timestamp", -1).limit(batas)
+    return [
+        {"nama": d.get("nama", "Anonim"), "komentar": d.get("komentar", ""), "timestamp": d.get("timestamp")}
+        for d in dokumen
+    ]
+
+
 def bersihkan_cache_data():
     """Hapus cache query supaya data terbaru langsung tampil setelah insert/delete."""
     ambil_data_mongo.clear()
+    ambil_komentar.clear()
+
+
+def escape_md(teks: str) -> str:
+    """Escape karakter markdown pada teks dari publik supaya tidak dirender sebagai markdown/link."""
+    teks = re.sub(r"([\\`*_{}\[\]()#+\-.!|<>~$])", r"\\\1", teks)
+    return teks.replace("\n", "  \n")
 
 
 # ------------------------------------------------------------
@@ -181,19 +262,33 @@ if "hasil_retrain" not in st.session_state:
 # ------------------------------------------------------------
 with st.sidebar:
     st.markdown("## ⚙️ Pengaturan")
-    tugas = st.radio("🎯 Jenis Tugas", ["Regresi", "Klasifikasi"], horizontal=True)
+    tugas = st.radio("🎯 Jenis Tugas", ["Regresi", "Klasifikasi", "Clustering"])
 
-    daftar_data = DATASET_REGRESI if tugas == "Regresi" else DATASET_KLASIFIKASI
+    if tugas == "Regresi":
+        daftar_data, daftar_model = DATASET_REGRESI, MODEL_REGRESI
+    elif tugas == "Klasifikasi":
+        daftar_data, daftar_model = DATASET_KLASIFIKASI, MODEL_KLASIFIKASI
+    else:
+        daftar_data, daftar_model = DATASET_CLUSTERING, MODEL_CLUSTERING
+
     nama_dataset = st.selectbox("📚 Dataset", list(daftar_data.keys()))
-
-    daftar_model = (
-        ["Linear Regression", "Ridge", "Lasso", "Decision Tree", "Random Forest"]
-        if tugas == "Regresi"
-        else ["Logistic Regression", "KNN", "Decision Tree", "Random Forest", "SVM"]
-    )
     nama_model = st.selectbox("🧩 Model", daftar_model)
 
-    test_size = st.slider("✂️ Test Size", 0.10, 0.50, 0.20, 0.05)
+    # Parameter khusus clustering (nilai default agar variabel selalu terdefinisi)
+    k_klaster, eps, min_samples = 3, 1.5, 5
+    if tugas == "Clustering":
+        if nama_model == "DBSCAN":
+            eps = st.slider("📡 eps", 0.1, 10.0, 1.5, 0.1,
+                            help="Jarak maksimum antar titik tetangga. Dataset berfitur banyak (mis. Wine) butuh eps lebih besar.")
+            min_samples = st.slider("👥 min_samples", 2, 30, 5, 1)
+        else:
+            k_klaster = st.slider("🔢 Jumlah Klaster (k)", 2, 10, 3, 1)
+
+    test_size = st.slider(
+        "✂️ Test Size", 0.10, 0.50, 0.20, 0.05,
+        disabled=(tugas == "Clustering"),
+        help="Tidak dipakai pada clustering, tetapi tetap dipakai untuk Retrain di tab Database.",
+    )
     # 🎲 Random state agar hasil bisa direproduksi
     random_state = st.number_input("🎲 Random State", min_value=0, max_value=9999, value=42, step=1)
     tombol_latih = st.button("🚀 Train Model", use_container_width=True, type="primary")
@@ -206,7 +301,7 @@ with st.sidebar:
 # ------------------------------------------------------------
 st.markdown('<p class="main-title">🤖 ML Playground</p>', unsafe_allow_html=True)
 st.markdown(
-    '<p class="subtitle">Eksplorasi model Machine Learning secara interaktif ✨</p>',
+    '<p class="subtitle">Regresi, Klasifikasi, dan Clustering secara interaktif ✨</p>',
     unsafe_allow_html=True,
 )
 
@@ -226,38 +321,153 @@ with st.expander("👀 Lihat cuplikan dataset"):
 # 🏋️ Proses training saat tombol ditekan
 # ------------------------------------------------------------
 if tombol_latih:
-    with st.spinner("⏳ Sedang melatih model..."):
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=test_size, random_state=int(random_state),
-            stratify=y if tugas == "Klasifikasi" else None,
-        )
-        model = buat_model(tugas, nama_model, int(random_state))
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
+    with st.spinner("⏳ Sedang memproses model..."):
+        rs = int(random_state)
 
-        # Simpan semua hasil ke session_state
-        st.session_state.hasil = {
-            "tugas": tugas,
-            "dataset": nama_dataset,
-            "model": nama_model,
-            "test_size": test_size,
-            "random_state": int(random_state),
-            "y_test": np.array(y_test),
-            "y_pred": np.array(y_pred),
-            "kelas": nama_kelas,
-        }
+        if tugas == "Clustering":
+            # Standarisasi fitur agar semua fitur setara pengaruhnya
+            Xs = StandardScaler().fit_transform(X)
+            model = buat_model_cluster(nama_model, k_klaster, eps, min_samples, rs)
+            labels = np.asarray(model.fit_predict(Xs))
+
+            # Proyeksi PCA 2D untuk visualisasi
+            pca = PCA(n_components=2, random_state=rs)
+            Z = pca.fit_transform(Xs)
+            pusat = pca.transform(model.cluster_centers_) if nama_model == "KMeans" else None
+
+            # Metrik internal (noise DBSCAN, label -1, dikeluarkan dari perhitungan)
+            mask = labels != -1
+            n_klaster = len(set(labels[mask]))
+            sil = dbi = chi = None
+            if n_klaster >= 2 and mask.sum() > n_klaster:
+                sil = silhouette_score(Xs[mask], labels[mask])
+                dbi = davies_bouldin_score(Xs[mask], labels[mask])
+                chi = calinski_harabasz_score(Xs[mask], labels[mask])
+
+            # Elbow plot (hanya untuk KMeans)
+            elbow = None
+            if nama_model == "KMeans":
+                rentang = list(range(2, 11))
+                inersia = [
+                    KMeans(n_clusters=kk, n_init=10, random_state=rs).fit(Xs).inertia_
+                    for kk in rentang
+                ]
+                elbow = (rentang, inersia)
+
+            # Tabel perbandingan klaster vs label asli
+            label_asli = [nama_kelas[i] for i in y] if nama_kelas else list(y)
+            tabel_silang = pd.crosstab(
+                pd.Series(label_asli, name="Label asli"),
+                pd.Series(["Noise" if l == -1 else f"Klaster {l}" for l in labels], name="Klaster"),
+            )
+
+            st.session_state.hasil = {
+                "tugas": "Clustering",
+                "dataset": nama_dataset,
+                "model": nama_model,
+                "random_state": rs,
+                "k": k_klaster, "eps": eps, "min_samples": min_samples,
+                "labels": labels,
+                "Z": Z,
+                "pusat": pusat,
+                "var_pca": pca.explained_variance_ratio_,
+                "n_klaster": n_klaster,
+                "n_noise": int((~mask).sum()),
+                "silhouette": sil, "davies_bouldin": dbi, "calinski": chi,
+                "ari": adjusted_rand_score(y, labels),
+                "elbow": elbow,
+                "tabel_silang": tabel_silang,
+            }
+        else:
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=test_size, random_state=rs,
+                stratify=y if tugas == "Klasifikasi" else None,
+            )
+            model = buat_model(tugas, nama_model, rs)
+            model.fit(X_train, y_train)
+            y_pred = model.predict(X_test)
+
+            # Simpan semua hasil ke session_state
+            st.session_state.hasil = {
+                "tugas": tugas,
+                "dataset": nama_dataset,
+                "model": nama_model,
+                "test_size": test_size,
+                "random_state": rs,
+                "y_test": np.array(y_test),
+                "y_pred": np.array(y_pred),
+                "kelas": nama_kelas,
+            }
     st.toast("Model berhasil dilatih! 🎉", icon="✅")
 
 # ------------------------------------------------------------
-# 📑 Tiga tab utama
+# 📑 Empat tab utama
 # ------------------------------------------------------------
-tab1, tab2, tab3 = st.tabs(["📈 Visualisasi", "📋 Evaluasi", "🗄️ Database & Retrain"])
+tab1, tab2, tab3, tab4 = st.tabs(
+    ["📈 Visualisasi", "📋 Evaluasi", "🗄️ Database & Retrain", "💬 Komentar"]
+)
 hasil = st.session_state.hasil
 
 # -------------------- Tab 1: Visualisasi --------------------
 with tab1:
     if hasil is None:
         st.info("👈 Pilih pengaturan di sidebar, lalu klik **🚀 Train Model** untuk memulai.")
+    elif hasil["tugas"] == "Clustering":
+        st.success(
+            f"✅ Hasil terakhir: **{hasil['model']}** pada dataset **{hasil['dataset']}** "
+            f"(Clustering, random state {hasil['random_state']})"
+        )
+        sns.set_theme(style="whitegrid")
+
+        # Siapkan data plot dengan nama klaster; noise diberi warna abu-abu
+        nama_label = ["Noise" if l == -1 else f"Klaster {l}" for l in hasil["labels"]]
+        df_plot = pd.DataFrame({"PC1": hasil["Z"][:, 0], "PC2": hasil["Z"][:, 1], "Klaster": nama_label})
+        urutan = sorted(set(nama_label), key=lambda s: (s == "Noise", s))
+        warna = sns.color_palette("tab10", n_colors=max(len(urutan), 3))
+        palet = {nm: ("#9CA3AF" if nm == "Noise" else warna[i]) for i, nm in enumerate(urutan)}
+
+        kiri, kanan = st.columns(2)
+        with kiri:
+            st.subheader("🔵 Sebaran Klaster (PCA 2D)")
+            fig, ax = plt.subplots(figsize=(7, 5.5))
+            sns.scatterplot(
+                data=df_plot, x="PC1", y="PC2", hue="Klaster", hue_order=urutan,
+                palette=palet, s=60, alpha=0.8, edgecolor="white", ax=ax,
+            )
+            if hasil["pusat"] is not None:
+                ax.scatter(hasil["pusat"][:, 0], hasil["pusat"][:, 1], c="black", marker="X",
+                           s=220, edgecolor="white", linewidths=1.5, label="Pusat klaster")
+            ax.set_xlabel(f"PC1 ({hasil['var_pca'][0]:.0%} varians)")
+            ax.set_ylabel(f"PC2 ({hasil['var_pca'][1]:.0%} varians)")
+            ax.legend(loc="best", fontsize=8)
+            sns.despine()
+            st.pyplot(fig)
+            plt.close(fig)
+
+        with kanan:
+            if hasil["elbow"] is not None:
+                st.subheader("📉 Elbow Plot (KMeans)")
+                rentang, inersia = hasil["elbow"]
+                fig2, ax2 = plt.subplots(figsize=(7, 5.5))
+                ax2.plot(rentang, inersia, "o-", color="#6366F1", lw=2)
+                ax2.axvline(hasil["k"], ls="--", color="#EC4899", label=f"k dipilih = {hasil['k']}")
+                ax2.set_xlabel("Jumlah klaster (k)")
+                ax2.set_ylabel("Inertia")
+                ax2.legend()
+                sns.despine()
+                st.pyplot(fig2)
+                plt.close(fig2)
+            else:
+                st.subheader("📊 Ukuran Tiap Klaster")
+                ukuran = df_plot["Klaster"].value_counts().reindex(urutan)
+                fig2, ax2 = plt.subplots(figsize=(7, 5.5))
+                sns.barplot(x=ukuran.index, y=ukuran.values, hue=ukuran.index,
+                            palette=palet, legend=False, ax=ax2)
+                ax2.set_xlabel("")
+                ax2.set_ylabel("Jumlah sampel")
+                sns.despine()
+                st.pyplot(fig2)
+                plt.close(fig2)
     else:
         st.success(
             f"✅ Hasil terakhir: **{hasil['model']}** pada dataset **{hasil['dataset']}** "
@@ -300,6 +510,32 @@ with tab1:
 with tab2:
     if hasil is None:
         st.info("👈 Latih model terlebih dahulu untuk melihat metrik evaluasi.")
+    elif hasil["tugas"] == "Clustering":
+        st.subheader("📋 Metrik Clustering")
+
+        def fmt(nilai):
+            return f"{nilai:.3f}" if nilai is not None else "–"
+
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("🔵 Silhouette", fmt(hasil["silhouette"]))
+        m2.metric("📉 Davies-Bouldin", fmt(hasil["davies_bouldin"]))
+        m3.metric("📈 Calinski-Harabasz", fmt(hasil["calinski"]))
+        m4.metric("🎯 Adjusted Rand Index", fmt(hasil["ari"]))
+        st.caption(
+            "Silhouette (−1 s.d. 1) dan Calinski-Harabasz: makin **tinggi** makin baik. "
+            "Davies-Bouldin: makin **rendah** makin baik. "
+            "Adjusted Rand Index membandingkan klaster dengan label asli (1 = identik, ≈0 = acak)."
+        )
+
+        n1, n2 = st.columns(2)
+        n1.metric("🔢 Jumlah Klaster", hasil["n_klaster"])
+        n2.metric("🚫 Titik Noise", hasil["n_noise"])
+        if hasil["silhouette"] is None:
+            st.warning("⚠️ Metrik internal tidak dapat dihitung karena klaster yang terbentuk kurang dari 2. "
+                       "Untuk DBSCAN, coba ubah `eps` atau `min_samples`.")
+
+        st.markdown("#### 🔀 Klaster vs Label Asli")
+        st.dataframe(hasil["tabel_silang"], use_container_width=True)
     else:
         y_test, y_pred = hasil["y_test"], hasil["y_pred"]
         st.subheader("📋 Metrik Evaluasi")
@@ -339,30 +575,7 @@ with tab2:
 with tab3:
     st.subheader("🍃 MongoDB CRUD — Data Iris")
 
-    # 🔌 Koneksi MongoDB dengan penanganan error yang jelas
-    try:
-        get_mongo_client()
-        koneksi_ok = True
-    except KeyError:
-        koneksi_ok = False
-        st.error(
-            "🔑 `MONGODB_URI` tidak ditemukan di `st.secrets`. "
-            "Buat file `.streamlit/secrets.toml` berisi:\n\n"
-            '```toml\nMONGODB_URI = "mongodb+srv://user:password@cluster.mongodb.net/"\n```'
-        )
-    except PyMongoError as e:
-        koneksi_ok = False
-        st.error(
-            "🔌 Gagal terhubung ke MongoDB. Periksa URI, username/password, "
-            "dan whitelist IP di MongoDB Atlas."
-        )
-        st.caption(f"Detail error: {e}")
-        get_mongo_client.clear()  # hapus cache koneksi gagal agar bisa dicoba lagi
-    except Exception as e:
-        koneksi_ok = False
-        st.error(f"⚠️ Terjadi kesalahan tak terduga saat koneksi: {e}")
-
-    if koneksi_ok:
+    if cek_koneksi():
         # ---------- 📊 Statistik collection ----------
         try:
             df_mongo = ambil_data_mongo()
@@ -512,3 +725,53 @@ with tab3:
                 sns.despine()
                 st.pyplot(fig_fi)
                 plt.close(fig_fi)
+
+# -------------------- Tab 4: Komentar --------------------
+with tab4:
+    st.subheader("💬 Komentar Pengunjung")
+    st.caption("Tinggalkan komentar atau saran untuk aplikasi ini. Komentar tersimpan di MongoDB.")
+
+    if cek_koneksi():
+        # ---------- ✍️ Form komentar ----------
+        with st.form("form_komentar", clear_on_submit=True):
+            nama_komentar = st.text_input("👤 Nama (opsional)", max_chars=50, placeholder="Anonim")
+            isi_komentar = st.text_area("💬 Komentar", max_chars=500, height=120,
+                                        placeholder="Tulis komentar Anda di sini...")
+            kirim_komentar = st.form_submit_button("📨 Kirim Komentar", type="primary")
+
+        if kirim_komentar:
+            if not isi_komentar.strip():
+                st.warning("⚠️ Komentar tidak boleh kosong.")
+            else:
+                try:
+                    get_collection_komentar().insert_one({
+                        "nama": nama_komentar.strip() or "Anonim",
+                        "komentar": isi_komentar.strip(),
+                        "timestamp": datetime.now(timezone.utc),  # disimpan dalam UTC
+                    })
+                    bersihkan_cache_data()
+                    st.toast("Komentar terkirim! 🎉", icon="💬")
+                    st.rerun()
+                except PyMongoError as e:
+                    st.error(f"❌ Gagal menyimpan komentar: {e}")
+
+        st.divider()
+
+        # ---------- 📜 Daftar komentar ----------
+        try:
+            daftar_komentar = ambil_komentar()
+        except PyMongoError as e:
+            st.error(f"⚠️ Gagal mengambil komentar: {e}")
+            daftar_komentar = []
+
+        st.metric("💬 Jumlah Komentar (maks. 100 terbaru ditampilkan)", len(daftar_komentar))
+
+        if not daftar_komentar:
+            st.info("📭 Belum ada komentar. Jadilah yang pertama!")
+        else:
+            for k in daftar_komentar:
+                waktu = k["timestamp"]
+                teks_waktu = (waktu + WIB).strftime("%d %b %Y, %H:%M") + " WIB" if waktu else "-"
+                with st.container(border=True):
+                    st.markdown(f"**👤 {escape_md(k['nama'])}** · 🕒 {teks_waktu}")
+                    st.markdown(escape_md(k["komentar"]))
