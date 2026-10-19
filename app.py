@@ -1,5 +1,5 @@
 # ============================================================
-# 🤖 ML Playground - Streamlit App (Layout Dashboard)
+# 🤖 MACHINE LEARNING  - Streamlit App (Layout Dashboard)
 # Regresi, Klasifikasi, Clustering + MongoDB (Retrain & Komentar)
 # ============================================================
 
