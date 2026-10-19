@@ -47,7 +47,7 @@ from bson import ObjectId
 # ⚙️ Konfigurasi halaman
 # ------------------------------------------------------------
 st.set_page_config(
-    page_title="ML Playground",
+    page_title="Machine Learning",
     page_icon="🤖",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -401,8 +401,8 @@ with st.sidebar:
     st.markdown('<div class="brand">ML<span>·</span>Playground</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="profile"><div class="avatar">🤖</div>'
-        '<div><div class="profile-nama">ML Playground</div>'
-        '<div class="profile-role">Data Science Lab</div></div></div>',
+        '<div><div class="profile-nama">Machine Learning</div>'
+        '<div class="profile-role">562024006</div></div></div>',
         unsafe_allow_html=True,
     )
 
