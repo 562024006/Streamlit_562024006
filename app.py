@@ -1,5 +1,5 @@
 # ============================================================
-# 🤖 ML Playground - Streamlit App
+# 🤖 ML Playground - Streamlit App (Layout Dashboard)
 # Regresi, Klasifikasi, Clustering + MongoDB (Retrain & Komentar)
 # ============================================================
 
@@ -44,7 +44,7 @@ from pymongo.errors import PyMongoError
 from bson import ObjectId
 
 # ------------------------------------------------------------
-# ⚙️ Konfigurasi halaman (layout wide)
+# ⚙️ Konfigurasi halaman
 # ------------------------------------------------------------
 st.set_page_config(
     page_title="ML Playground",
@@ -54,26 +54,105 @@ st.set_page_config(
 )
 
 # ------------------------------------------------------------
-# 🎨 CSS kustom supaya tampilan lebih elegan (tema pink)
+# 🎨 CSS: layout dashboard (sidebar menu, kartu, panel skor)
+# Catatan: container ber-key "card_*" / "panel_*" butuh Streamlit >= 1.39
 # ------------------------------------------------------------
 st.markdown(
     """
     <style>
-    .main-title {
-        font-size: 2.6rem; font-weight: 800;
-        background: linear-gradient(90deg, #F472B6, #BE185D);
-        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        margin-bottom: 0;
+    /* ---------- Latar & kanvas utama ---------- */
+    [data-testid="stAppViewContainer"] {
+        background: linear-gradient(135deg, #EBD3E0 0%, #CFA9C3 100%);
     }
-    .subtitle { color: #9D5C7C; font-size: 1.05rem; margin-top: 0; }
+    header[data-testid="stHeader"] { background: transparent; }
+    .block-container {
+        max-width: 1280px;
+        background: #FFF5F9;
+        border-radius: 28px;
+        padding: 2rem 2.2rem 2.5rem 2.2rem;
+        margin: 1.2rem auto;
+        box-shadow: 0 10px 40px rgba(120, 50, 90, 0.18);
+    }
+
+    /* ---------- Sidebar ---------- */
+    section[data-testid="stSidebar"] { background: #F7DCEA; }
+    section[data-testid="stSidebar"] .block-container {
+        background: transparent; box-shadow: none; padding: 1.2rem 1rem; margin: 0;
+    }
+    .brand { font-size: 1.6rem; font-weight: 800; color: #7A2A57; letter-spacing: -0.5px; }
+    .brand span { color: #EC4899; }
+    .profile {
+        display: flex; align-items: center; gap: 12px;
+        margin: 14px 0 18px 0; padding: 4px 2px;
+    }
+    .avatar {
+        width: 52px; height: 52px; border-radius: 50%;
+        background: linear-gradient(135deg, #F9A8D4, #BE185D);
+        display: flex; align-items: center; justify-content: center; font-size: 1.6rem;
+        box-shadow: 0 2px 8px rgba(190,24,93,.3);
+    }
+    .profile-nama { font-weight: 700; color: #3B0A24; line-height: 1.2; }
+    .profile-role { font-size: .8rem; color: #9D5C7C; }
+
+    /* Menu navigasi (st.radio) tampil seperti daftar menu */
+    [data-testid="stSidebar"] [role="radiogroup"] { gap: 4px; }
+    [data-testid="stSidebar"] [role="radiogroup"] label {
+        padding: 10px 14px; border-radius: 14px; width: 100%; cursor: pointer;
+        transition: background .15s;
+    }
+    [data-testid="stSidebar"] [role="radiogroup"] label > div:first-child { display: none; }
+    [data-testid="stSidebar"] [role="radiogroup"] label:hover { background: rgba(255,255,255,.55); }
+    [data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) {
+        background: #FFF5F9; font-weight: 700;
+        box-shadow: 0 2px 8px rgba(190,24,93,.12);
+    }
+
+    /* ---------- Header ---------- */
+    .hello { font-size: 1.9rem; font-weight: 800; color: #5B1F42; letter-spacing: .5px; margin: 0; }
+    .hello-sub { color: #9D5C7C; margin: 2px 0 0 0; font-size: .98rem; }
+    .chip {
+        display: inline-block; background: #F7DCEA; color: #7A2A57; font-weight: 600;
+        border-radius: 999px; padding: 6px 14px; margin: 0 6px 6px 0; font-size: .85rem;
+        border: 1px solid #F3C4DC;
+    }
+
+    /* ---------- Kartu ---------- */
+    [class*="st-key-card"] {
+        background: #FCE7F3; border: 1px solid #F5CDE2; border-radius: 22px;
+        padding: 1.1rem 1.3rem; box-shadow: 0 2px 10px rgba(190,24,93,.08);
+    }
+    .card-title { font-weight: 700; color: #5B1F42; font-size: 1.02rem; margin-bottom: .4rem; }
     div[data-testid="stMetric"] {
         background: linear-gradient(135deg, #FFFFFF 0%, #FCE7F3 100%);
         border: 1px solid #FBCFE8; border-radius: 16px;
-        padding: 16px 20px; box-shadow: 0 2px 8px rgba(190,24,93,0.10);
+        padding: 14px 18px; box-shadow: 0 2px 8px rgba(190,24,93,0.08);
     }
     div[data-testid="stMetric"] label,
     div[data-testid="stMetric"] div { color: #3B0A24 !important; }
-    .stTabs [data-baseweb="tab"] { font-size: 1.05rem; font-weight: 600; }
+
+    /* ---------- Panel skor (kanan) ---------- */
+    .st-key-panel_kanan {
+        border: 1px solid #D9A9C4; border-radius: 26px; padding: 1rem;
+        background: #FBE3EF;
+    }
+    .gauge-card {
+        background: linear-gradient(160deg, #A8688B 0%, #8E4F73 100%);
+        border-radius: 22px; padding: 16px 12px 14px 12px; margin-bottom: 14px;
+        text-align: center; color: #fff;
+        box-shadow: 0 3px 10px rgba(110, 40, 80, .25);
+    }
+    .gauge-title { font-weight: 600; font-size: .95rem; opacity: .95; }
+    .ring {
+        width: 112px; height: 112px; border-radius: 50%; margin: 10px auto 4px auto;
+        display: flex; align-items: center; justify-content: center; position: relative;
+        background: conic-gradient(var(--c) calc(var(--p) * 1%), rgba(255,255,255,.22) 0);
+    }
+    .ring::before {
+        content: ""; position: absolute; inset: 11px; border-radius: 50%; background: #9A5A7D;
+    }
+    .ring span { position: relative; font-weight: 800; font-size: 1.2rem; color: #fff; }
+    .stat-num { font-size: 2rem; font-weight: 800; margin: 18px 0 14px 0; }
+    .panel-link { text-align: center; color: #7A2A57; font-weight: 600; font-size: .9rem; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -110,6 +189,8 @@ SPECIES_MAP = {"setosa": 0, "versicolor": 1, "virginica": 2}  # string -> intege
 SPECIES_LIST = list(SPECIES_MAP.keys())
 TEMA_GRAFIK = {"figure.facecolor": "#FFF5F9", "axes.facecolor": "#FFFFFF", "grid.color": "#FBCFE8"}
 WIB = timedelta(hours=7)  # selisih UTC -> WIB untuk tampilan komentar
+
+MENU = ["🏠 Dashboard", "📈 Visualisasi", "📋 Evaluasi", "🗄️ Database & Retrain", "💬 Komentar"]
 
 
 def buat_model(tugas: str, nama: str, random_state: int):
@@ -251,6 +332,61 @@ def escape_md(teks: str) -> str:
 
 
 # ------------------------------------------------------------
+# 🧱 Helper tampilan (kartu, header, gauge)
+# ------------------------------------------------------------
+def kartu(nama: str):
+    """Container bergaya kartu (di-style lewat CSS dengan key 'card_*')."""
+    return st.container(key=f"card_{nama}")
+
+
+def judul_kartu(teks: str):
+    st.markdown(f'<div class="card-title">{teks}</div>', unsafe_allow_html=True)
+
+
+def header_halaman(judul: str, sub: str, chips: list | None = None):
+    st.markdown(f'<p class="hello">{judul}</p><p class="hello-sub">{sub}</p>', unsafe_allow_html=True)
+    if chips:
+        st.markdown("".join(f'<span class="chip">{c}</span>' for c in chips), unsafe_allow_html=True)
+
+
+def gauge_html(judul: str, pct, teks: str, warna: str) -> str:
+    """Kartu skor: cincin persentase bila pct (0-1) tersedia, selain itu angka besar."""
+    if pct is None:
+        isi = f'<div class="stat-num">{teks}</div>'
+    else:
+        p = max(0.0, min(1.0, float(pct))) * 100
+        isi = f'<div class="ring" style="--p:{p:.0f};--c:{warna}"><span>{teks}</span></div>'
+    return f'<div class="gauge-card"><div class="gauge-title">{judul}</div>{isi}</div>'
+
+
+def skor_ringkas(hasil):
+    """Mengembalikan 3 skor utama (judul, pct 0-1 / None, teks) untuk panel kanan."""
+    if hasil is None:
+        return [("Skor 1", 0, "–"), ("Skor 2", 0, "–"), ("Skor 3", 0, "–")]
+    if hasil["tugas"] == "Clustering":
+        sil, dbi, ari = hasil["silhouette"], hasil["davies_bouldin"], hasil["ari"]
+        return [
+            ("Silhouette", sil if sil is not None else 0, f"{sil:.2f}" if sil is not None else "–"),
+            ("Adjusted Rand Index", max(ari, 0), f"{ari:.2f}"),
+            ("Davies-Bouldin", None, f"{dbi:.2f}" if dbi is not None else "–"),
+        ]
+    y_test, y_pred = hasil["y_test"], hasil["y_pred"]
+    if hasil["tugas"] == "Regresi":
+        r2 = r2_score(y_test, y_pred)
+        mae = mean_absolute_error(y_test, y_pred)
+        rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+        return [("R²", max(r2, 0), f"{r2:.2f}"), ("MAE", None, f"{mae:.2f}"), ("RMSE", None, f"{rmse:.2f}")]
+    acc = accuracy_score(y_test, y_pred)
+    f1 = f1_score(y_test, y_pred, average="weighted", zero_division=0)
+    rec = recall_score(y_test, y_pred, average="weighted", zero_division=0)
+    return [
+        ("Accuracy", acc, f"{acc:.0%}"),
+        ("F1-Score", f1, f"{f1:.0%}"),
+        ("Recall", rec, f"{rec:.0%}"),
+    ]
+
+
+# ------------------------------------------------------------
 # 🧠 Session state: simpan hasil agar tidak hilang saat rerun
 # ------------------------------------------------------------
 if "hasil" not in st.session_state:
@@ -259,64 +395,56 @@ if "hasil_retrain" not in st.session_state:
     st.session_state.hasil_retrain = None
 
 # ------------------------------------------------------------
-# 🎛️ Sidebar
+# 🎛️ Sidebar: brand, profil, menu, pengaturan, tombol train
 # ------------------------------------------------------------
 with st.sidebar:
-    st.markdown("## ⚙️ Pengaturan")
-    tugas = st.radio("🎯 Jenis Tugas", ["Regresi", "Klasifikasi", "Clustering"])
-
-    if tugas == "Regresi":
-        daftar_data, daftar_model = DATASET_REGRESI, MODEL_REGRESI
-    elif tugas == "Klasifikasi":
-        daftar_data, daftar_model = DATASET_KLASIFIKASI, MODEL_KLASIFIKASI
-    else:
-        daftar_data, daftar_model = DATASET_CLUSTERING, MODEL_CLUSTERING
-
-    nama_dataset = st.selectbox("📚 Dataset", list(daftar_data.keys()))
-    nama_model = st.selectbox("🧩 Model", daftar_model)
-
-    # Parameter khusus clustering (nilai default agar variabel selalu terdefinisi)
-    k_klaster, eps, min_samples = 3, 1.5, 5
-    if tugas == "Clustering":
-        if nama_model == "DBSCAN":
-            eps = st.slider("📡 eps", 0.1, 10.0, 1.5, 0.1,
-                            help="Jarak maksimum antar titik tetangga. Dataset berfitur banyak (mis. Wine) butuh eps lebih besar.")
-            min_samples = st.slider("👥 min_samples", 2, 30, 5, 1)
-        else:
-            k_klaster = st.slider("🔢 Jumlah Klaster (k)", 2, 10, 3, 1)
-
-    test_size = st.slider(
-        "✂️ Test Size", 0.10, 0.50, 0.20, 0.05,
-        disabled=(tugas == "Clustering"),
-        help="Tidak dipakai pada clustering, tetapi tetap dipakai untuk Retrain di tab Database.",
+    st.markdown('<div class="brand">ML<span>·</span>Playground</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="profile"><div class="avatar">🤖</div>'
+        '<div><div class="profile-nama">ML Playground</div>'
+        '<div class="profile-role">Data Science Lab</div></div></div>',
+        unsafe_allow_html=True,
     )
-    # 🎲 Random state agar hasil bisa direproduksi
-    random_state = st.number_input("🎲 Random State", min_value=0, max_value=9999, value=42, step=1)
-    tombol_latih = st.button("🚀 Train Model", use_container_width=True, type="primary")
+
+    halaman = st.radio("Menu", MENU, label_visibility="collapsed", key="halaman")
 
     st.divider()
-    st.caption("Dibuat dengan ❤️ menggunakan Streamlit & scikit-learn")
+    with st.expander("⚙️ Pengaturan Model", expanded=True):
+        tugas = st.radio("🎯 Jenis Tugas", ["Regresi", "Klasifikasi", "Clustering"])
 
-# ------------------------------------------------------------
-# 🏷️ Header
-# ------------------------------------------------------------
-st.markdown('<p class="main-title">🤖 ML Playground</p>', unsafe_allow_html=True)
-st.markdown(
-    '<p class="subtitle">Regresi, Klasifikasi, dan Clustering secara interaktif ✨</p>',
-    unsafe_allow_html=True,
-)
+        if tugas == "Regresi":
+            daftar_data, daftar_model = DATASET_REGRESI, MODEL_REGRESI
+        elif tugas == "Klasifikasi":
+            daftar_data, daftar_model = DATASET_KLASIFIKASI, MODEL_KLASIFIKASI
+        else:
+            daftar_data, daftar_model = DATASET_CLUSTERING, MODEL_CLUSTERING
+
+        nama_dataset = st.selectbox("📚 Dataset", list(daftar_data.keys()))
+        nama_model = st.selectbox("🧩 Model", daftar_model)
+
+        # Parameter khusus clustering (nilai default agar variabel selalu terdefinisi)
+        k_klaster, eps, min_samples = 3, 1.5, 5
+        if tugas == "Clustering":
+            if nama_model == "DBSCAN":
+                eps = st.slider("📡 eps", 0.1, 10.0, 1.5, 0.1,
+                                help="Jarak maksimum antar titik tetangga. Dataset berfitur banyak (mis. Wine) butuh eps lebih besar.")
+                min_samples = st.slider("👥 min_samples", 2, 30, 5, 1)
+            else:
+                k_klaster = st.slider("🔢 Jumlah Klaster (k)", 2, 10, 3, 1)
+
+        test_size = st.slider(
+            "✂️ Test Size", 0.10, 0.50, 0.20, 0.05,
+            disabled=(tugas == "Clustering"),
+            help="Tidak dipakai pada clustering, tetapi tetap dipakai untuk Retrain di menu Database.",
+        )
+        # 🎲 Random state agar hasil bisa direproduksi
+        random_state = st.number_input("🎲 Random State", min_value=0, max_value=9999, value=42, step=1)
+
+    tombol_latih = st.button("🚀 Train Model", use_container_width=True, type="primary")
+    st.caption("Dibuat dengan ❤️ menggunakan Streamlit & scikit-learn")
 
 # Muat data (di-cache)
 X, y, nama_kelas = muat_dataset(tugas, nama_dataset)
-
-# Ringkasan dataset
-c1, c2, c3 = st.columns(3)
-c1.metric("📏 Jumlah Sampel", f"{X.shape[0]:,}")
-c2.metric("🧮 Jumlah Fitur", X.shape[1])
-c3.metric("🎯 Tugas", tugas)
-
-with st.expander("👀 Lihat cuplikan dataset"):
-    st.dataframe(pd.concat([X, y], axis=1).head(10), use_container_width=True)
 
 # ------------------------------------------------------------
 # 🏋️ Proses training saat tombol ditekan
@@ -401,25 +529,31 @@ if tombol_latih:
             }
     st.toast("Model berhasil dilatih! 🎉", icon="✅")
 
-# ------------------------------------------------------------
-# 📑 Empat tab utama
-# ------------------------------------------------------------
-tab1, tab2, tab3, tab4 = st.tabs(
-    ["📈 Visualisasi", "📋 Evaluasi", "🗄️ Database & Retrain", "💬 Komentar"]
-)
 hasil = st.session_state.hasil
 
-# -------------------- Tab 1: Visualisasi --------------------
-with tab1:
+
+# ------------------------------------------------------------
+# 📈 Fungsi render per halaman
+# ------------------------------------------------------------
+def render_visualisasi(hasil, ringkas: bool = False):
+    """Grafik hasil model. Mode ringkas dipakai di Dashboard (satu grafik, ukuran kecil)."""
     if hasil is None:
         st.info("👈 Pilih pengaturan di sidebar, lalu klik **🚀 Train Model** untuk memulai.")
-    elif hasil["tugas"] == "Clustering":
+        return
+
+    sk = 0.7 if ringkas else 1.0  # faktor skala ukuran gambar
+    if not ringkas:
         st.success(
             f"✅ Hasil terakhir: **{hasil['model']}** pada dataset **{hasil['dataset']}** "
-            f"(Clustering, random state {hasil['random_state']})"
+            + (
+                f"(Clustering, random state {hasil['random_state']})"
+                if hasil["tugas"] == "Clustering"
+                else f"({hasil['tugas']}, test size {hasil['test_size']:.0%}, random state {hasil['random_state']})"
+            )
         )
-        sns.set_theme(style="whitegrid", rc=TEMA_GRAFIK)
+    sns.set_theme(style="whitegrid", rc=TEMA_GRAFIK)
 
+    if hasil["tugas"] == "Clustering":
         # Siapkan data plot dengan nama klaster; noise diberi warna abu-abu
         nama_label = ["Noise" if l == -1 else f"Klaster {l}" for l in hasil["labels"]]
         df_plot = pd.DataFrame({"PC1": hasil["Z"][:, 0], "PC2": hasil["Z"][:, 1], "Klaster": nama_label})
@@ -427,10 +561,9 @@ with tab1:
         warna = sns.color_palette("tab10", n_colors=max(len(urutan), 3))
         palet = {nm: ("#9CA3AF" if nm == "Noise" else warna[i]) for i, nm in enumerate(urutan)}
 
-        kiri, kanan = st.columns(2)
-        with kiri:
+        def gambar_scatter():
             st.subheader("🔵 Sebaran Klaster (PCA 2D)")
-            fig, ax = plt.subplots(figsize=(7, 5.5))
+            fig, ax = plt.subplots(figsize=(7 * sk, 5.5 * sk))
             sns.scatterplot(
                 data=df_plot, x="PC1", y="PC2", hue="Klaster", hue_order=urutan,
                 palette=palet, s=60, alpha=0.8, edgecolor="white", ax=ax,
@@ -445,6 +578,13 @@ with tab1:
             st.pyplot(fig)
             plt.close(fig)
 
+        if ringkas:
+            gambar_scatter()
+            return
+
+        kiri, kanan = st.columns(2)
+        with kiri:
+            gambar_scatter()
         with kanan:
             if hasil["elbow"] is not None:
                 st.subheader("📉 Elbow Plot (KMeans)")
@@ -469,49 +609,51 @@ with tab1:
                 sns.despine()
                 st.pyplot(fig2)
                 plt.close(fig2)
+        return
+
+    # ----- Regresi / Klasifikasi -----
+    y_test, y_pred = hasil["y_test"], hasil["y_pred"]
+    if hasil["tugas"] == "Regresi":
+        st.subheader("📈 Actual vs Predicted")
+        fig, ax = plt.subplots(figsize=(8 * sk, 5.5 * sk))
+        sns.scatterplot(x=y_test, y=y_pred, ax=ax, color="#EC4899", s=70, alpha=0.75, edgecolor="white")
+        batas = [min(y_test.min(), y_pred.min()), max(y_test.max(), y_pred.max())]
+        ax.plot(batas, batas, "--", color="#BE185D", lw=2, label="Prediksi Sempurna")
+        ax.set_xlabel("Actual")
+        ax.set_ylabel("Predicted")
+        ax.legend()
+        sns.despine()
     else:
-        st.success(
-            f"✅ Hasil terakhir: **{hasil['model']}** pada dataset **{hasil['dataset']}** "
-            f"({hasil['tugas']}, test size {hasil['test_size']:.0%}, random state {hasil['random_state']})"
+        st.subheader("🧩 Confusion Matrix")
+        cm = confusion_matrix(y_test, y_pred)
+        label = hasil["kelas"] if hasil["kelas"] else None
+        ukuran = (9, 7) if cm.shape[0] > 5 else (7, 5.5)
+        fig, ax = plt.subplots(figsize=(ukuran[0] * sk, ukuran[1] * sk))
+        sns.heatmap(
+            cm, annot=True, fmt="d", cmap="RdPu", ax=ax,
+            xticklabels=label if label else "auto",
+            yticklabels=label if label else "auto",
+            linewidths=0.5, cbar_kws={"shrink": 0.8},
         )
-        y_test, y_pred = hasil["y_test"], hasil["y_pred"]
-        sns.set_theme(style="whitegrid", rc=TEMA_GRAFIK)
+        ax.set_xlabel("Predicted")
+        ax.set_ylabel("Actual")
 
-        if hasil["tugas"] == "Regresi":
-            st.subheader("📈 Actual vs Predicted")
-            fig, ax = plt.subplots(figsize=(8, 5.5))
-            sns.scatterplot(x=y_test, y=y_pred, ax=ax, color="#EC4899", s=70, alpha=0.75, edgecolor="white")
-            batas = [min(y_test.min(), y_pred.min()), max(y_test.max(), y_pred.max())]
-            ax.plot(batas, batas, "--", color="#BE185D", lw=2, label="Prediksi Sempurna")
-            ax.set_xlabel("Actual")
-            ax.set_ylabel("Predicted")
-            ax.legend()
-            sns.despine()
-        else:
-            st.subheader("🧩 Confusion Matrix")
-            cm = confusion_matrix(y_test, y_pred)
-            label = hasil["kelas"] if hasil["kelas"] else None
-            ukuran = (9, 7) if cm.shape[0] > 5 else (7, 5.5)
-            fig, ax = plt.subplots(figsize=ukuran)
-            sns.heatmap(
-                cm, annot=True, fmt="d", cmap="RdPu", ax=ax,
-                xticklabels=label if label else "auto",
-                yticklabels=label if label else "auto",
-                linewidths=0.5, cbar_kws={"shrink": 0.8},
-            )
-            ax.set_xlabel("Predicted")
-            ax.set_ylabel("Actual")
-
+    if ringkas:
+        st.pyplot(fig)
+    else:
         _, col_b, _ = st.columns([1, 3, 1])
         with col_b:
             st.pyplot(fig)
-        plt.close(fig)  # bebaskan memori
+    plt.close(fig)  # bebaskan memori
 
-# -------------------- Tab 2: Evaluasi --------------------
-with tab2:
+
+def render_evaluasi(hasil):
+    """Metrik evaluasi lengkap."""
     if hasil is None:
         st.info("👈 Latih model terlebih dahulu untuk melihat metrik evaluasi.")
-    elif hasil["tugas"] == "Clustering":
+        return
+
+    if hasil["tugas"] == "Clustering":
         st.subheader("📋 Metrik Clustering")
 
         def fmt(nilai):
@@ -537,62 +679,63 @@ with tab2:
 
         st.markdown("#### 🔀 Klaster vs Label Asli")
         st.dataframe(hasil["tabel_silang"], use_container_width=True)
+        return
+
+    y_test, y_pred = hasil["y_test"], hasil["y_pred"]
+    st.subheader("📋 Metrik Evaluasi")
+
+    if hasil["tugas"] == "Regresi":
+        mae = mean_absolute_error(y_test, y_pred)
+        mse = mean_squared_error(y_test, y_pred)
+        rmse = np.sqrt(mse)
+        r2 = r2_score(y_test, y_pred)
+
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("📏 MAE", f"{mae:.3f}")
+        m2.metric("📐 MSE", f"{mse:.3f}")
+        m3.metric("📊 RMSE", f"{rmse:.3f}")
+        m4.metric("🏆 R²", f"{r2:.3f}")
     else:
-        y_test, y_pred = hasil["y_test"], hasil["y_pred"]
-        st.subheader("📋 Metrik Evaluasi")
+        acc = accuracy_score(y_test, y_pred)
+        prec = precision_score(y_test, y_pred, average="weighted", zero_division=0)
+        rec = recall_score(y_test, y_pred, average="weighted", zero_division=0)
+        f1 = f1_score(y_test, y_pred, average="weighted", zero_division=0)
 
-        if hasil["tugas"] == "Regresi":
-            mae = mean_absolute_error(y_test, y_pred)
-            mse = mean_squared_error(y_test, y_pred)
-            rmse = np.sqrt(mse)
-            r2 = r2_score(y_test, y_pred)
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("🎯 Accuracy", f"{acc:.3f}")
+        m2.metric("🔍 Precision", f"{prec:.3f}")
+        m3.metric("📡 Recall", f"{rec:.3f}")
+        m4.metric("⚖️ F1-Score", f"{f1:.3f}")
+        st.caption("Precision, Recall, dan F1 dihitung dengan rata-rata *weighted*.")
 
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("📏 MAE", f"{mae:.3f}")
-            m2.metric("📐 MSE", f"{mse:.3f}")
-            m3.metric("📊 RMSE", f"{rmse:.3f}")
-            m4.metric("🏆 R²", f"{r2:.3f}")
-        else:
-            acc = accuracy_score(y_test, y_pred)
-            prec = precision_score(y_test, y_pred, average="weighted", zero_division=0)
-            rec = recall_score(y_test, y_pred, average="weighted", zero_division=0)
-            f1 = f1_score(y_test, y_pred, average="weighted", zero_division=0)
+        st.markdown("#### 📝 Classification Report")
+        laporan = classification_report(
+            y_test, y_pred, target_names=hasil["kelas"] if hasil["kelas"] else None,
+            output_dict=True, zero_division=0,
+        )
+        st.dataframe(pd.DataFrame(laporan).T.round(3), use_container_width=True)
 
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("🎯 Accuracy", f"{acc:.3f}")
-            m2.metric("🔍 Precision", f"{prec:.3f}")
-            m3.metric("📡 Recall", f"{rec:.3f}")
-            m4.metric("⚖️ F1-Score", f"{f1:.3f}")
-            st.caption("Precision, Recall, dan F1 dihitung dengan rata-rata *weighted*.")
 
-            st.markdown("#### 📝 Classification Report")
-            laporan = classification_report(
-                y_test, y_pred, target_names=hasil["kelas"] if hasil["kelas"] else None,
-                output_dict=True, zero_division=0,
-            )
-            st.dataframe(pd.DataFrame(laporan).T.round(3), use_container_width=True)
+def render_database():
+    """MongoDB CRUD data Iris + Retrain Random Forest."""
+    if not cek_koneksi():
+        return
 
-# -------------------- Tab 3: Database & Retrain --------------------
-with tab3:
-    st.subheader("🍃 MongoDB CRUD — Data Iris")
+    # ---------- 📊 Statistik collection ----------
+    try:
+        df_mongo = ambil_data_mongo()
+    except PyMongoError as e:
+        st.error(f"⚠️ Gagal mengambil data dari MongoDB: {e}")
+        df_mongo = pd.DataFrame(columns=["_id"] + FITUR_IRIS + ["species", "timestamp"])
 
-    if cek_koneksi():
-        # ---------- 📊 Statistik collection ----------
-        try:
-            df_mongo = ambil_data_mongo()
-        except PyMongoError as e:
-            st.error(f"⚠️ Gagal mengambil data dari MongoDB: {e}")
-            df_mongo = pd.DataFrame(columns=["_id"] + FITUR_IRIS + ["species", "timestamp"])
+    s1, s2, s3 = st.columns(3)
+    s1.metric("📦 Total Dokumen", f"{len(df_mongo):,}")
+    s2.metric("🗃️ Database", NAMA_DB)
+    s3.metric("📁 Collection", NAMA_COLLECTION)
 
-        s1, s2, s3 = st.columns(3)
-        s1.metric("📦 Total Dokumen", f"{len(df_mongo):,}")
-        s2.metric("🗃️ Database", NAMA_DB)
-        s3.metric("📁 Collection", NAMA_COLLECTION)
-
-        st.divider()
-
-        # ---------- ➕ Form insert ----------
-        st.markdown("### ➕ Tambah Data Iris")
+    # ---------- ➕ Form insert ----------
+    with kartu("db_insert"):
+        judul_kartu("➕ Tambah Data Iris")
         with st.form("form_insert", clear_on_submit=True):
             f1, f2, f3, f4 = st.columns(4)
             sepal_length = f1.number_input("🌿 Sepal Length", 0.0, 15.0, 5.0, 0.1)
@@ -602,33 +745,31 @@ with tab3:
             species = st.selectbox("🏷️ Species", SPECIES_LIST)
             kirim = st.form_submit_button("💾 Simpan ke MongoDB", type="primary")
 
-        if kirim:
-            try:
-                get_collection().insert_one({
-                    "sepal_length": float(sepal_length),
-                    "sepal_width": float(sepal_width),
-                    "petal_length": float(petal_length),
-                    "petal_width": float(petal_width),
-                    "species": species,
-                    "timestamp": datetime.now(),  # timestamp otomatis
-                })
-                bersihkan_cache_data()
-                st.toast("Data berhasil disimpan! ✅", icon="💾")
-                st.rerun()  # muat ulang halaman agar tabel langsung terbarui
-            except PyMongoError as e:
-                st.error(f"❌ Gagal menyimpan data: {e}")
+    if kirim:
+        try:
+            get_collection().insert_one({
+                "sepal_length": float(sepal_length),
+                "sepal_width": float(sepal_width),
+                "petal_length": float(petal_length),
+                "petal_width": float(petal_width),
+                "species": species,
+                "timestamp": datetime.now(),  # timestamp otomatis
+            })
+            bersihkan_cache_data()
+            st.toast("Data berhasil disimpan! ✅", icon="💾")
+            st.rerun()  # muat ulang halaman agar tabel langsung terbarui
+        except PyMongoError as e:
+            st.error(f"❌ Gagal menyimpan data: {e}")
 
-        st.divider()
-
-        # ---------- 📋 Tabel data ----------
-        st.markdown("### 📋 Data di MongoDB")
+    # ---------- 📋 Tabel data + 🗑️ hapus ----------
+    with kartu("db_tabel"):
+        judul_kartu("📋 Data di MongoDB")
         if df_mongo.empty:
             st.info("📭 Collection masih kosong. Tambahkan data lewat form di atas.")
         else:
             st.dataframe(df_mongo, use_container_width=True, hide_index=True)
 
-            # ---------- 🗑️ Hapus berdasarkan _id ----------
-            st.markdown("### 🗑️ Hapus Data")
+            st.markdown("**🗑️ Hapus Data**")
             d1, d2 = st.columns([3, 1])
             id_dipilih = d1.selectbox("Pilih `_id` dokumen yang akan dihapus", df_mongo["_id"].tolist())
             d2.write("")  # spasi agar tombol sejajar
@@ -647,10 +788,9 @@ with tab3:
                 except PyMongoError as e:
                     st.error(f"❌ Gagal menghapus data: {e}")
 
-        st.divider()
-
-        # ---------- 🔁 Retrain ----------
-        st.markdown("### 🔁 Retrain Random Forest")
+    # ---------- 🔁 Retrain ----------
+    with kartu("db_retrain"):
+        judul_kartu("🔁 Retrain Random Forest")
         st.caption(
             "Menggabungkan 150 sampel Iris dari scikit-learn dengan data dari MongoDB, "
             f"lalu melatih ulang Random Forest (random state = {int(random_state)})."
@@ -729,44 +869,47 @@ with tab3:
                 st.pyplot(fig_fi)
                 plt.close(fig_fi)
 
-# -------------------- Tab 4: Komentar --------------------
-with tab4:
-    st.subheader("💬 Komentar Pengunjung")
-    st.caption("Tinggalkan komentar atau saran untuk aplikasi ini. Komentar tersimpan di MongoDB.")
 
-    if cek_koneksi():
-        # ---------- ✍️ Form komentar ----------
+def render_komentar():
+    """Form komentar + daftar komentar dari MongoDB."""
+    if not cek_koneksi():
+        return
+
+    # ---------- ✍️ Form komentar ----------
+    with kartu("komentar_form"):
+        judul_kartu("✍️ Tulis Komentar")
+        st.caption("Tinggalkan komentar atau saran untuk aplikasi ini. Komentar tersimpan di MongoDB.")
         with st.form("form_komentar", clear_on_submit=True):
             nama_komentar = st.text_input("👤 Nama (opsional)", max_chars=50, placeholder="Anonim")
             isi_komentar = st.text_area("💬 Komentar", max_chars=500, height=120,
                                         placeholder="Tulis komentar Anda di sini...")
             kirim_komentar = st.form_submit_button("📨 Kirim Komentar", type="primary")
 
-        if kirim_komentar:
-            if not isi_komentar.strip():
-                st.warning("⚠️ Komentar tidak boleh kosong.")
-            else:
-                try:
-                    get_collection_komentar().insert_one({
-                        "nama": nama_komentar.strip() or "Anonim",
-                        "komentar": isi_komentar.strip(),
-                        "timestamp": datetime.now(timezone.utc),  # disimpan dalam UTC
-                    })
-                    bersihkan_cache_data()
-                    st.toast("Komentar terkirim! 🎉", icon="💬")
-                    st.rerun()
-                except PyMongoError as e:
-                    st.error(f"❌ Gagal menyimpan komentar: {e}")
+    if kirim_komentar:
+        if not isi_komentar.strip():
+            st.warning("⚠️ Komentar tidak boleh kosong.")
+        else:
+            try:
+                get_collection_komentar().insert_one({
+                    "nama": nama_komentar.strip() or "Anonim",
+                    "komentar": isi_komentar.strip(),
+                    "timestamp": datetime.now(timezone.utc),  # disimpan dalam UTC
+                })
+                bersihkan_cache_data()
+                st.toast("Komentar terkirim! 🎉", icon="💬")
+                st.rerun()
+            except PyMongoError as e:
+                st.error(f"❌ Gagal menyimpan komentar: {e}")
 
-        st.divider()
+    # ---------- 📜 Daftar komentar ----------
+    try:
+        daftar_komentar = ambil_komentar()
+    except PyMongoError as e:
+        st.error(f"⚠️ Gagal mengambil komentar: {e}")
+        daftar_komentar = []
 
-        # ---------- 📜 Daftar komentar ----------
-        try:
-            daftar_komentar = ambil_komentar()
-        except PyMongoError as e:
-            st.error(f"⚠️ Gagal mengambil komentar: {e}")
-            daftar_komentar = []
-
+    with kartu("komentar_list"):
+        judul_kartu("📜 Daftar Komentar")
         st.metric("💬 Jumlah Komentar (maks. 100 terbaru ditampilkan)", len(daftar_komentar))
 
         if not daftar_komentar:
@@ -778,3 +921,75 @@ with tab4:
                 with st.container(border=True):
                     st.markdown(f"**👤 {escape_md(k['nama'])}** · 🕒 {teks_waktu}")
                     st.markdown(escape_md(k["komentar"]))
+
+
+# ------------------------------------------------------------
+# 🧭 Routing halaman sesuai menu sidebar
+# ------------------------------------------------------------
+if halaman == MENU[0]:
+    # ===== Dashboard: kolom utama (kiri) + panel skor (kanan) =====
+    header_halaman(
+        "HALO, SELAMAT DATANG! 👋",
+        "Regresi, Klasifikasi, dan Clustering secara interaktif ✨",
+        [f"🎯 {tugas}", f"📚 {nama_dataset}", f"🧩 {nama_model}", f"🎲 Seed {int(random_state)}"],
+    )
+    st.write("")
+
+    utama, panel = st.columns([3, 1.05], gap="large")
+
+    with utama:
+        a, b = st.columns(2, gap="medium")
+        with a:
+            with kartu("ringkas"):
+                judul_kartu("📊 Ringkasan Dataset")
+                m1, m2 = st.columns(2)
+                m1.metric("📏 Sampel", f"{X.shape[0]:,}")
+                m2.metric("🧮 Fitur", X.shape[1])
+        with b:
+            with kartu("status"):
+                judul_kartu("🧠 Status Model")
+                if hasil is None:
+                    st.info("Belum ada model. Klik **🚀 Train Model** di sidebar.")
+                else:
+                    st.success(f"**{hasil['model']}** pada **{hasil['dataset']}**")
+                    st.caption(f"Tugas: {hasil['tugas']} · random state {hasil['random_state']}")
+
+        with kartu("cuplikan"):
+            judul_kartu("👀 Cuplikan Dataset")
+            st.dataframe(pd.concat([X, y], axis=1).head(10), use_container_width=True)
+
+        with kartu("hasil"):
+            judul_kartu("📈 Visualisasi Terbaru")
+            render_visualisasi(hasil, ringkas=True)
+
+    with panel:
+        with st.container(key="panel_kanan"):
+            warna = ["#F9A8D4", "#5EEAD4", "#FCD34D"]
+            kartu_skor = "".join(
+                gauge_html(j, p, t, warna[i]) for i, (j, p, t) in enumerate(skor_ringkas(hasil))
+            )
+            st.markdown(kartu_skor, unsafe_allow_html=True)
+            st.markdown('<div class="panel-link">Lihat detail di menu 📋 Evaluasi</div>',
+                        unsafe_allow_html=True)
+
+elif halaman == MENU[1]:
+    header_halaman("📈 VISUALISASI", "Grafik hasil model terakhir yang dilatih.")
+    st.write("")
+    with kartu("visual"):
+        render_visualisasi(hasil)
+
+elif halaman == MENU[2]:
+    header_halaman("📋 EVALUASI", "Metrik performa model terakhir yang dilatih.")
+    st.write("")
+    with kartu("eval"):
+        render_evaluasi(hasil)
+
+elif halaman == MENU[3]:
+    header_halaman("🗄️ DATABASE & RETRAIN", "Kelola data Iris di MongoDB dan latih ulang Random Forest.")
+    st.write("")
+    render_database()
+
+else:
+    header_halaman("💬 KOMENTAR", "Komentar pengunjung tersimpan di MongoDB.")
+    st.write("")
+    render_komentar()
