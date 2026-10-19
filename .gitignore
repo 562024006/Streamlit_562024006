@@ -182,4 +182,3 @@ cython_debug/
 
 .vscode/
 .streamlit/secrets.toml
-.streamlit/

@@ -54,25 +54,25 @@ st.set_page_config(
 )
 
 # ------------------------------------------------------------
-# 🎨 CSS kustom supaya tampilan lebih elegan
+# 🎨 CSS kustom supaya tampilan lebih elegan (tema pink)
 # ------------------------------------------------------------
 st.markdown(
     """
     <style>
     .main-title {
         font-size: 2.6rem; font-weight: 800;
-        background: linear-gradient(90deg, #6366F1, #EC4899);
+        background: linear-gradient(90deg, #F472B6, #BE185D);
         -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         margin-bottom: 0;
     }
-    .subtitle { color: #6B7280; font-size: 1.05rem; margin-top: 0; }
+    .subtitle { color: #9D5C7C; font-size: 1.05rem; margin-top: 0; }
     div[data-testid="stMetric"] {
-        background: linear-gradient(135deg, #EEF2FF 0%, #FDF2F8 100%);
-        border: 1px solid #E5E7EB; border-radius: 16px;
-        padding: 16px 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        background: linear-gradient(135deg, #FFFFFF 0%, #FCE7F3 100%);
+        border: 1px solid #FBCFE8; border-radius: 16px;
+        padding: 16px 20px; box-shadow: 0 2px 8px rgba(190,24,93,0.10);
     }
     div[data-testid="stMetric"] label,
-    div[data-testid="stMetric"] div { color: #1F2937 !important; }
+    div[data-testid="stMetric"] div { color: #3B0A24 !important; }
     .stTabs [data-baseweb="tab"] { font-size: 1.05rem; font-weight: 600; }
     </style>
     """,
@@ -108,6 +108,7 @@ NAMA_COLLECTION_KOMENTAR = "komentar"
 FITUR_IRIS = ["sepal_length", "sepal_width", "petal_length", "petal_width"]
 SPECIES_MAP = {"setosa": 0, "versicolor": 1, "virginica": 2}  # string -> integer
 SPECIES_LIST = list(SPECIES_MAP.keys())
+TEMA_GRAFIK = {"figure.facecolor": "#FFF5F9", "axes.facecolor": "#FFFFFF", "grid.color": "#FBCFE8"}
 WIB = timedelta(hours=7)  # selisih UTC -> WIB untuk tampilan komentar
 
 
@@ -417,7 +418,7 @@ with tab1:
             f"✅ Hasil terakhir: **{hasil['model']}** pada dataset **{hasil['dataset']}** "
             f"(Clustering, random state {hasil['random_state']})"
         )
-        sns.set_theme(style="whitegrid")
+        sns.set_theme(style="whitegrid", rc=TEMA_GRAFIK)
 
         # Siapkan data plot dengan nama klaster; noise diberi warna abu-abu
         nama_label = ["Noise" if l == -1 else f"Klaster {l}" for l in hasil["labels"]]
@@ -449,8 +450,8 @@ with tab1:
                 st.subheader("📉 Elbow Plot (KMeans)")
                 rentang, inersia = hasil["elbow"]
                 fig2, ax2 = plt.subplots(figsize=(7, 5.5))
-                ax2.plot(rentang, inersia, "o-", color="#6366F1", lw=2)
-                ax2.axvline(hasil["k"], ls="--", color="#EC4899", label=f"k dipilih = {hasil['k']}")
+                ax2.plot(rentang, inersia, "o-", color="#EC4899", lw=2)
+                ax2.axvline(hasil["k"], ls="--", color="#BE185D", label=f"k dipilih = {hasil['k']}")
                 ax2.set_xlabel("Jumlah klaster (k)")
                 ax2.set_ylabel("Inertia")
                 ax2.legend()
@@ -474,14 +475,14 @@ with tab1:
             f"({hasil['tugas']}, test size {hasil['test_size']:.0%}, random state {hasil['random_state']})"
         )
         y_test, y_pred = hasil["y_test"], hasil["y_pred"]
-        sns.set_theme(style="whitegrid")
+        sns.set_theme(style="whitegrid", rc=TEMA_GRAFIK)
 
         if hasil["tugas"] == "Regresi":
             st.subheader("📈 Actual vs Predicted")
             fig, ax = plt.subplots(figsize=(8, 5.5))
-            sns.scatterplot(x=y_test, y=y_pred, ax=ax, color="#6366F1", s=70, alpha=0.75, edgecolor="white")
+            sns.scatterplot(x=y_test, y=y_pred, ax=ax, color="#EC4899", s=70, alpha=0.75, edgecolor="white")
             batas = [min(y_test.min(), y_pred.min()), max(y_test.max(), y_pred.max())]
-            ax.plot(batas, batas, "--", color="#EC4899", lw=2, label="Prediksi Sempurna")
+            ax.plot(batas, batas, "--", color="#BE185D", lw=2, label="Prediksi Sempurna")
             ax.set_xlabel("Actual")
             ax.set_ylabel("Predicted")
             ax.legend()
@@ -493,7 +494,7 @@ with tab1:
             ukuran = (9, 7) if cm.shape[0] > 5 else (7, 5.5)
             fig, ax = plt.subplots(figsize=ukuran)
             sns.heatmap(
-                cm, annot=True, fmt="d", cmap="PuRd", ax=ax,
+                cm, annot=True, fmt="d", cmap="RdPu", ax=ax,
                 xticklabels=label if label else "auto",
                 yticklabels=label if label else "auto",
                 linewidths=0.5, cbar_kws={"shrink": 0.8},
@@ -714,11 +715,13 @@ with tab3:
                 st.dataframe(hr["laporan"], use_container_width=True)
             with col_kanan:
                 st.markdown("#### ⭐ Feature Importance")
-                sns.set_theme(style="whitegrid")
+                sns.set_theme(style="whitegrid", rc=TEMA_GRAFIK)
                 fig_fi, ax_fi = plt.subplots(figsize=(6, 4))
                 sns.barplot(
                     x=hr["importance"].values, y=hr["importance"].index,
-                    hue=hr["importance"].index, palette="viridis", legend=False, ax=ax_fi,
+                    hue=hr["importance"].index,
+                    palette=sns.blend_palette(["#F9A8D4", "#BE185D"], n_colors=len(hr["importance"])),
+                    legend=False, ax=ax_fi,
                 )
                 ax_fi.set_xlabel("Importance")
                 ax_fi.set_ylabel("")
