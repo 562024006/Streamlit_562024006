@@ -398,7 +398,7 @@ if "hasil_retrain" not in st.session_state:
 # 🎛️ Sidebar: brand, profil, menu, pengaturan, tombol train
 # ------------------------------------------------------------
 with st.sidebar:
-    st.markdown('<div class="brand">ML<span>·</span>Playground</div>', unsafe_allow_html=True)
+    st.markdown('<div class="brand">Machine<span>·</span>Learning</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="profile"><div class="avatar">🤖</div>'
         '<div><div class="profile-nama">Machine Learning</div>'
