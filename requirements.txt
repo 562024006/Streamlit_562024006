@@ -1,3 +1,4 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
 streamlit
 pandas
 numpy
@@ -5,7 +6,7 @@ scikit-learn
 matplotlib
 seaborn
 pymongo
-dnspython
 ucimlrepo
 groq
 requests
+torch

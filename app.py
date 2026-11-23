@@ -2,7 +2,7 @@
 # 🤖 MACHINE LEARNING  - Streamlit App (Layout Dashboard)
 # Regresi, Klasifikasi, Clustering + MongoDB (Retrain & Komentar)
 # + Dataset sklearn, UCI Machine Learning Repository & USGS real-time
-# + Ringkasan & sentimen komentar dengan LLM Groq
+# + Deep learning ringan (PyTorch) + Ringkasan & sentimen komentar Groq
 # ============================================================
 
 import json
@@ -15,6 +15,10 @@ import pandas as pd
 import requests
 import seaborn as sns
 import streamlit as st
+
+# Deep learning (PyTorch, versi CPU)
+import torch
+import torch.nn as nn
 
 from sklearn import datasets
 from sklearn.model_selection import train_test_split
@@ -203,8 +207,10 @@ DATASET_CLUSTERING = {
     "🌍 Gempa USGS (real-time)": ID_REALTIME,
 }
 
-MODEL_REGRESI = ["Linear Regression", "Ridge", "Lasso", "Decision Tree", "Random Forest"]
-MODEL_KLASIFIKASI = ["Logistic Regression", "KNN", "Decision Tree", "Random Forest", "SVM"]
+NAMA_NN = "Neural Network (PyTorch)"  # model deep learning ringan
+
+MODEL_REGRESI = ["Linear Regression", "Ridge", "Lasso", "Decision Tree", "Random Forest", NAMA_NN]
+MODEL_KLASIFIKASI = ["Logistic Regression", "KNN", "Decision Tree", "Random Forest", "SVM", NAMA_NN]
 MODEL_CLUSTERING = ["KMeans", "Agglomerative", "DBSCAN", "Gaussian Mixture"]
 
 NAMA_DB = "test_db"
@@ -221,7 +227,83 @@ WIB = timedelta(hours=7)  # selisih UTC -> WIB untuk tampilan waktu
 MENU = ["🏠 Dashboard", "📈 Visualisasi", "📋 Evaluasi", "🗄️ Database & Retrain", "💬 Komentar"]
 
 
-def buat_model(tugas: str, nama: str, random_state: int):
+# ------------------------------------------------------------
+# 🧠 Deep learning ringan: jaringan saraf PyTorch (2 hidden layer)
+# Antarmuka fit/predict dibuat mirip scikit-learn agar mudah dipakai
+# ------------------------------------------------------------
+class JaringanSaraf:
+    """Jaringan saraf kecil (input -> 64 -> 32 -> output) untuk regresi/klasifikasi."""
+
+    def __init__(self, tugas: str, epochs: int = 100, random_state: int = 42,
+                 lr: float = 0.01, batch: int = 64):
+        self.tugas = tugas
+        self.epochs = epochs
+        self.random_state = random_state
+        self.lr = lr
+        self.batch = batch
+        self.riwayat_loss = []  # loss rata-rata tiap epoch (untuk kurva loss)
+
+    def _bangun(self, d_in: int, d_out: int):
+        return nn.Sequential(
+            nn.Linear(d_in, 64), nn.ReLU(),
+            nn.Linear(64, 32), nn.ReLU(),
+            nn.Linear(32, d_out),
+        )
+
+    def fit(self, X, y):
+        torch.manual_seed(self.random_state)
+        X = np.asarray(X, dtype=np.float64)
+        y = np.asarray(y)
+
+        # Standarisasi fitur (disimpan agar dipakai lagi saat predict)
+        self.mu = X.mean(axis=0)
+        self.sd = X.std(axis=0)
+        self.sd[self.sd == 0] = 1.0
+        Xt = torch.tensor((X - self.mu) / self.sd, dtype=torch.float32)
+
+        if self.tugas == "Regresi":
+            y = y.astype(np.float64)
+            self.y_mu = y.mean()
+            self.y_sd = y.std() or 1.0  # target ikut distandarisasi agar training stabil
+            yt = torch.tensor((y - self.y_mu) / self.y_sd, dtype=torch.float32).view(-1, 1)
+            d_out, kriteria = 1, nn.MSELoss()
+        else:
+            self.kelas_ = np.unique(y)
+            yt = torch.tensor(np.searchsorted(self.kelas_, y), dtype=torch.long)
+            d_out, kriteria = len(self.kelas_), nn.CrossEntropyLoss()
+
+        self.net = self._bangun(Xt.shape[1], d_out)
+        optimizer = torch.optim.Adam(self.net.parameters(), lr=self.lr)
+        gen = torch.Generator().manual_seed(self.random_state)
+        n = Xt.shape[0]
+
+        self.riwayat_loss = []
+        self.net.train()
+        for _ in range(self.epochs):
+            urutan = torch.randperm(n, generator=gen)  # acak urutan data tiap epoch
+            total = 0.0
+            for i in range(0, n, self.batch):
+                idx = urutan[i:i + self.batch]
+                optimizer.zero_grad()
+                loss = kriteria(self.net(Xt[idx]), yt[idx])
+                loss.backward()
+                optimizer.step()
+                total += loss.item() * len(idx)
+            self.riwayat_loss.append(total / n)
+        return self
+
+    def predict(self, X):
+        X = np.asarray(X, dtype=np.float64)
+        Xt = torch.tensor((X - self.mu) / self.sd, dtype=torch.float32)
+        self.net.eval()
+        with torch.no_grad():
+            keluaran = self.net(Xt)
+        if self.tugas == "Regresi":
+            return keluaran.numpy().ravel() * self.y_sd + self.y_mu
+        return self.kelas_[keluaran.argmax(dim=1).numpy()]
+
+
+def buat_model(tugas: str, nama: str, random_state: int, epochs: int = 100):
     """Membuat model sesuai pilihan; model yang sensitif skala dibungkus scaler."""
     if tugas == "Regresi":
         peta = {
@@ -230,6 +312,7 @@ def buat_model(tugas: str, nama: str, random_state: int):
             "Lasso": Lasso(alpha=0.1, random_state=random_state),
             "Decision Tree": DecisionTreeRegressor(random_state=random_state),
             "Random Forest": RandomForestRegressor(n_estimators=100, random_state=random_state),
+            NAMA_NN: JaringanSaraf("Regresi", epochs=epochs, random_state=random_state),
         }
     else:
         peta = {
@@ -240,6 +323,7 @@ def buat_model(tugas: str, nama: str, random_state: int):
             "Decision Tree": DecisionTreeClassifier(random_state=random_state),
             "Random Forest": RandomForestClassifier(n_estimators=100, random_state=random_state),
             "SVM": make_pipeline(StandardScaler(), SVC(random_state=random_state)),
+            NAMA_NN: JaringanSaraf("Klasifikasi", epochs=epochs, random_state=random_state),
         }
     return peta[nama]
 
@@ -591,6 +675,12 @@ with st.sidebar:
             else:
                 k_klaster = st.slider("🔢 Jumlah Klaster (k)", 2, 10, 3, 1)
 
+        # Parameter khusus neural network (nilai default agar variabel selalu terdefinisi)
+        epochs = 100
+        if nama_model == NAMA_NN:
+            epochs = st.slider("🔁 Epoch", 20, 300, 100, 10,
+                               help="Jumlah putaran training. Makin besar makin lama, terutama pada dataset besar.")
+
         test_size = st.slider(
             "✂️ Test Size", 0.10, 0.50, 0.20, 0.05,
             disabled=(tugas == "Clustering"),
@@ -600,7 +690,7 @@ with st.sidebar:
         random_state = st.number_input("🎲 Random State", min_value=0, max_value=9999, value=42, step=1)
 
     tombol_latih = st.button("🚀 Train Model", use_container_width=True, type="primary")
-    st.caption("Dibuat dengan ❤️ menggunakan Streamlit & scikit-learn")
+    st.caption("Dibuat dengan ❤️ menggunakan Streamlit, scikit-learn & PyTorch")
 
 # Muat data (di-cache); beri pesan jelas bila unduhan UCI/USGS gagal
 try:
@@ -686,7 +776,7 @@ if tombol_latih:
                 X, y, test_size=test_size, random_state=rs,
                 stratify=y if tugas == "Klasifikasi" else None,
             )
-            model = buat_model(tugas, nama_model, rs)
+            model = buat_model(tugas, nama_model, rs, epochs)
             model.fit(X_train, y_train)
             y_pred = model.predict(X_test)
 
@@ -700,6 +790,7 @@ if tombol_latih:
                 "y_test": np.array(y_test),
                 "y_pred": np.array(y_pred),
                 "kelas": nama_kelas,
+                "loss": getattr(model, "riwayat_loss", None),  # kurva loss (hanya neural network)
             }
     st.toast("Model berhasil dilatih! 🎉", icon="✅")
 
@@ -819,6 +910,27 @@ def render_visualisasi(hasil, ringkas: bool = False):
         with col_b:
             st.pyplot(fig)
     plt.close(fig)  # bebaskan memori
+
+    # ----- Kurva loss per epoch (hanya untuk neural network) -----
+    if not ringkas and hasil.get("loss"):
+        st.subheader("📉 Kurva Loss per Epoch (PyTorch)")
+        riwayat = hasil["loss"]
+        fig_l, ax_l = plt.subplots(figsize=(8, 4.5))
+        ax_l.plot(range(1, len(riwayat) + 1), riwayat, color="#EC4899", lw=2)
+        ax_l.set_xlabel("Epoch")
+        ax_l.set_ylabel(
+            "Loss (MSE, target terstandar)" if hasil["tugas"] == "Regresi"
+            else "Loss (cross-entropy)"
+        )
+        sns.despine()
+        _, col_l, _ = st.columns([1, 3, 1])
+        with col_l:
+            st.pyplot(fig_l)
+            st.caption(
+                f"Loss awal {riwayat[0]:.4f} → loss akhir {riwayat[-1]:.4f} "
+                f"setelah {len(riwayat)} epoch. Kurva yang turun dan melandai menandakan model belajar."
+            )
+        plt.close(fig_l)
 
 
 def render_evaluasi(hasil):
