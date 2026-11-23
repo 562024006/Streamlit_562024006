@@ -1,7 +1,7 @@
 # ============================================================
 # 🤖 MACHINE LEARNING  - Streamlit App (Layout Dashboard)
 # Regresi, Klasifikasi, Clustering + MongoDB (Retrain & Komentar)
-# + Dataset sklearn & UCI Machine Learning Repository
+# + Dataset sklearn, UCI Machine Learning Repository & USGS real-time
 # + Ringkasan & sentimen komentar dengan LLM Groq
 # ============================================================
 
@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import requests
 import seaborn as sns
 import streamlit as st
 
@@ -169,15 +170,20 @@ st.markdown(
 
 # ------------------------------------------------------------
 # 📦 Konstanta dataset, model, dan MongoDB
-# Nilai dataset: fungsi loader (sklearn) ATAU angka ID (UCI)
+# Nilai dataset: fungsi loader (sklearn), angka ID (UCI), atau penanda real-time
 # ------------------------------------------------------------
 MAKS_BARIS_UCI = 5000  # dataset UCI yang lebih besar akan di-sampel acak agar ringan
+
+# Dataset real-time: gempa bumi 7 hari terakhir dari USGS (gratis, tanpa API key)
+URL_USGS = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson"
+ID_REALTIME = "usgs"  # penanda dataset real-time
 
 DATASET_REGRESI = {
     "🏠 Diabetes": datasets.load_diabetes,
     "🌸 Linnerud (target 1)": datasets.load_linnerud,
     "🍷 Wine Quality (UCI)": 186,
     "🧱 Concrete Strength (UCI)": 165,
+    "🌍 Gempa USGS (real-time)": ID_REALTIME,
 }
 DATASET_KLASIFIKASI = {
     "🌺 Iris": datasets.load_iris,
@@ -186,6 +192,7 @@ DATASET_KLASIFIKASI = {
     "🔢 Digits": datasets.load_digits,
     "🫘 Dry Bean (UCI)": 602,
     "🪟 Glass Identification (UCI)": 42,
+    "🌍 Gempa USGS (real-time)": ID_REALTIME,
 }
 DATASET_CLUSTERING = {
     "🌺 Iris": datasets.load_iris,
@@ -193,6 +200,7 @@ DATASET_CLUSTERING = {
     "🎗️ Breast Cancer": datasets.load_breast_cancer,
     "🫘 Dry Bean (UCI)": 602,
     "🪟 Glass Identification (UCI)": 42,
+    "🌍 Gempa USGS (real-time)": ID_REALTIME,
 }
 
 MODEL_REGRESI = ["Linear Regression", "Ridge", "Lasso", "Decision Tree", "Random Forest"]
@@ -208,7 +216,7 @@ FITUR_IRIS = ["sepal_length", "sepal_width", "petal_length", "petal_width"]
 SPECIES_MAP = {"setosa": 0, "versicolor": 1, "virginica": 2}  # string -> integer
 SPECIES_LIST = list(SPECIES_MAP.keys())
 TEMA_GRAFIK = {"figure.facecolor": "#FFF5F9", "axes.facecolor": "#FFFFFF", "grid.color": "#FBCFE8"}
-WIB = timedelta(hours=7)  # selisih UTC -> WIB untuk tampilan komentar
+WIB = timedelta(hours=7)  # selisih UTC -> WIB untuk tampilan waktu
 
 MENU = ["🏠 Dashboard", "📈 Visualisasi", "📋 Evaluasi", "🗄️ Database & Retrain", "💬 Komentar"]
 
@@ -301,6 +309,40 @@ def muat_dataset(tugas: str, nama: str):
     punya_kelas = tugas in ("Klasifikasi", "Clustering") and hasattr(data, "target_names")
     kelas = list(data.target_names) if punya_kelas else None
     return X, y, kelas
+
+
+# ------------------------------------------------------------
+# 🌍 Dataset real-time: gempa bumi USGS (cache 5 menit)
+# ------------------------------------------------------------
+@st.cache_data(ttl=300, show_spinner="🌍 Mengambil data gempa terbaru dari USGS...")
+def muat_gempa(tugas: str):
+    """Data gempa 7 hari terakhir dari USGS, di-cache 5 menit (ttl=300)."""
+    resp = requests.get(URL_USGS, timeout=20)
+    resp.raise_for_status()
+
+    baris = []
+    for f in resp.json()["features"]:
+        p = f["properties"]
+        lon, lat, dep = f["geometry"]["coordinates"][:3]
+        baris.append({
+            "longitude": lon, "latitude": lat, "depth": dep,
+            "rms": p.get("rms"), "mag": p.get("mag"),
+        })
+    df = pd.DataFrame(baris).dropna(subset=["mag"]).reset_index(drop=True)
+
+    # Nilai kosong pada fitur diisi median agar baris tidak terbuang
+    X = df[["longitude", "latitude", "depth", "rms"]].astype(float)
+    X = X.fillna(X.median()).fillna(0.0)
+    mag = df["mag"].astype(float)
+    waktu = datetime.now(timezone.utc) + WIB  # waktu pengambilan (WIB)
+
+    if tugas == "Regresi":
+        return X, pd.Series(mag.values, name="mag"), None, waktu
+
+    # Klasifikasi/Clustering: magnitudo dibagi 3 kelas berukuran seimbang
+    kategori = pd.qcut(mag.rank(method="first"), 3, labels=["Rendah", "Sedang", "Tinggi"])
+    kode, nama_kls = pd.factorize(kategori.astype(str))
+    return X, pd.Series(kode, name="target"), [str(n) for n in nama_kls], waktu
 
 
 # ------------------------------------------------------------
@@ -560,9 +602,16 @@ with st.sidebar:
     tombol_latih = st.button("🚀 Train Model", use_container_width=True, type="primary")
     st.caption("Dibuat dengan ❤️ menggunakan Streamlit & scikit-learn")
 
-# Muat data (di-cache); beri pesan jelas bila unduhan UCI gagal
+# Muat data (di-cache); beri pesan jelas bila unduhan UCI/USGS gagal
 try:
-    X, y, nama_kelas = muat_dataset(tugas, nama_dataset)
+    if daftar_data[nama_dataset] == ID_REALTIME:
+        X, y, nama_kelas, waktu_ambil = muat_gempa(tugas)
+        st.sidebar.caption(
+            f"🌍 Data real-time diambil {waktu_ambil:%d %b %Y, %H:%M} WIB "
+            "(diperbarui otomatis tiap 5 menit)."
+        )
+    else:
+        X, y, nama_kelas = muat_dataset(tugas, nama_dataset)
 except Exception as e:
     st.error(
         f"❌ Gagal memuat dataset **{nama_dataset}**. Periksa koneksi internet, "
