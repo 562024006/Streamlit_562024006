@@ -160,21 +160,30 @@ st.markdown(
 
 # ------------------------------------------------------------
 # 📦 Konstanta dataset, model, dan MongoDB
+# Nilai dataset: fungsi loader (sklearn) ATAU angka ID (UCI)
 # ------------------------------------------------------------
+MAKS_BARIS_UCI = 5000  # dataset UCI yang lebih besar akan di-sampel acak agar ringan
+
 DATASET_REGRESI = {
     "🏠 Diabetes": datasets.load_diabetes,
     "🌸 Linnerud (target 1)": datasets.load_linnerud,
+    "🍷 Wine Quality (UCI)": 186,
+    "🧱 Concrete Strength (UCI)": 165,
 }
 DATASET_KLASIFIKASI = {
     "🌺 Iris": datasets.load_iris,
     "🍷 Wine": datasets.load_wine,
     "🎗️ Breast Cancer": datasets.load_breast_cancer,
     "🔢 Digits": datasets.load_digits,
+    "🫘 Dry Bean (UCI)": 602,
+    "🪟 Glass Identification (UCI)": 42,
 }
 DATASET_CLUSTERING = {
     "🌺 Iris": datasets.load_iris,
     "🍷 Wine": datasets.load_wine,
     "🎗️ Breast Cancer": datasets.load_breast_cancer,
+    "🫘 Dry Bean (UCI)": 602,
+    "🪟 Glass Identification (UCI)": 42,
 }
 
 MODEL_REGRESI = ["Linear Regression", "Ridge", "Lasso", "Decision Tree", "Random Forest"]
@@ -228,17 +237,47 @@ def buat_model_cluster(nama: str, k: int, eps: float, min_samples: int, random_s
 
 
 # ------------------------------------------------------------
-# 💾 Cache pemuatan dataset
+# 💾 Cache pemuatan dataset (sklearn + UCI)
 # ------------------------------------------------------------
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner="📡 Memuat dataset...")
 def muat_dataset(tugas: str, nama: str):
-    """Memuat dataset toy dan mengembalikan X (DataFrame), y (Series), nama kelas."""
+    """Memuat dataset sklearn atau UCI dan mengembalikan X (DataFrame), y (Series), nama kelas."""
     if tugas == "Regresi":
         loader = DATASET_REGRESI[nama]
     elif tugas == "Klasifikasi":
         loader = DATASET_KLASIFIKASI[nama]
     else:
         loader = DATASET_CLUSTERING[nama]
+
+    # ----- Dataset UCI: nilainya integer (ID dataset) -----
+    if isinstance(loader, int):
+        d = fetch_ucirepo(id=loader)
+        X = d.data.features.copy()
+        y = d.data.targets.iloc[:, 0].copy()  # ambil target pertama
+
+        # Buang baris yang ada nilai kosongnya
+        mask = X.notna().all(axis=1) & y.notna()
+        X, y = X[mask], y[mask]
+
+        # Dataset besar (mis. CDC Diabetes ~253 ribu baris) di-sampel agar ringan
+        if len(X) > MAKS_BARIS_UCI:
+            idx = X.sample(n=MAKS_BARIS_UCI, random_state=42).index
+            X, y = X.loc[idx], y.loc[idx]
+
+        # Kolom teks -> one-hot, lalu semuanya jadi float
+        X = pd.get_dummies(X, drop_first=True).astype(float)
+
+        if tugas == "Regresi":
+            y = pd.to_numeric(y)
+            kelas = None
+        else:
+            kode, nama_kls = pd.factorize(y)
+            y = pd.Series(kode)
+            kelas = [str(n) for n in nama_kls]
+
+        return X.reset_index(drop=True), pd.Series(y.values, name="target"), kelas
+
+    # ----- Dataset sklearn -----
     data = loader()
     X = pd.DataFrame(data.data, columns=data.feature_names)
 
@@ -443,8 +482,16 @@ with st.sidebar:
     tombol_latih = st.button("🚀 Train Model", use_container_width=True, type="primary")
     st.caption("Dibuat dengan ❤️ menggunakan Streamlit & scikit-learn")
 
-# Muat data (di-cache)
-X, y, nama_kelas = muat_dataset(tugas, nama_dataset)
+# Muat data (di-cache); beri pesan jelas bila unduhan UCI gagal
+try:
+    X, y, nama_kelas = muat_dataset(tugas, nama_dataset)
+except Exception as e:
+    st.error(
+        f"❌ Gagal memuat dataset **{nama_dataset}**. Periksa koneksi internet, "
+        "atau pilih dataset lain."
+    )
+    st.caption(f"Detail error: {e}")
+    st.stop()
 
 # ------------------------------------------------------------
 # 🏋️ Proses training saat tombol ditekan
