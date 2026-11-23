@@ -3,6 +3,7 @@
 # Regresi, Klasifikasi, Clustering + MongoDB (Retrain & Komentar)
 # + Dataset sklearn, UCI Machine Learning Repository & USGS real-time
 # + Deep learning ringan (PyTorch) + Ringkasan & sentimen komentar Groq
+# + Tema pink-putih dengan kartu dan animasi
 # ============================================================
 
 import json
@@ -15,6 +16,7 @@ import pandas as pd
 import requests
 import seaborn as sns
 import streamlit as st
+import streamlit.components.v1 as components
 
 # Deep learning (PyTorch, versi CPU)
 import torch
@@ -68,108 +70,270 @@ st.set_page_config(
 )
 
 # ------------------------------------------------------------
-# 🎨 CSS: layout dashboard (sidebar menu, kartu, panel skor)
+# 🎨 CSS: tema pink-putih, kartu, animasi, dropdown "pilih saja"
 # Catatan: container ber-key "card_*" / "panel_*" butuh Streamlit >= 1.39
 # ------------------------------------------------------------
 st.markdown(
     """
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
+
+    /* ---------- Animasi ---------- */
+    @property --p { syntax: '<number>'; inherits: false; initial-value: 0; }
+    @keyframes naik { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+    @keyframes geser { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+    @keyframes melayang { 0%, 100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-14px) rotate(8deg); } }
+    @keyframes denyut { 0%, 100% { box-shadow: 0 0 0 0 rgba(236,72,153,.45); } 50% { box-shadow: 0 0 0 10px rgba(236,72,153,0); } }
+    @keyframes isiCincin { from { --p: 0; } }
+    @keyframes kilau { 0% { transform: translateX(-120%); } 100% { transform: translateX(220%); } }
+
     /* ---------- Latar & kanvas utama ---------- */
     [data-testid="stAppViewContainer"] {
-        background: linear-gradient(135deg, #EBD3E0 0%, #CFA9C3 100%);
+        background: linear-gradient(135deg, #FFE4F1 0%, #FFD0E7 45%, #F9B5D6 100%);
+        background-attachment: fixed;
     }
     header[data-testid="stHeader"] { background: transparent; }
     .block-container {
         max-width: 1280px;
-        background: #FFF5F9;
-        border-radius: 28px;
+        background: #FFFFFF;
+        border-radius: 30px;
         padding: 2rem 2.2rem 2.5rem 2.2rem;
         margin: 1.2rem auto;
-        box-shadow: 0 10px 40px rgba(120, 50, 90, 0.18);
+        box-shadow: 0 14px 50px rgba(190, 24, 93, 0.18);
     }
+    .stApp, [data-testid="stMarkdownContainer"] p, [data-testid="stMarkdownContainer"] li,
+    [data-testid="stWidgetLabel"] p, label, h1, h2, h3, h4 { color: #4A1030; }
+    h1, h2, h3, h4, [data-testid="stMarkdownContainer"] p { font-family: 'Poppins', sans-serif; }
+    [data-testid="stCaptionContainer"] { color: #9D5C7C; }
 
     /* ---------- Sidebar ---------- */
-    section[data-testid="stSidebar"] { background: #F7DCEA; }
-    section[data-testid="stSidebar"] .block-container {
-        background: transparent; box-shadow: none; padding: 1.2rem 1rem; margin: 0;
+    section[data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #FFF0F7 0%, #FBD3E7 100%);
+        border-right: 1px solid #F9C4DD;
     }
-    .brand { font-size: 1.6rem; font-weight: 800; color: #7A2A57; letter-spacing: -0.5px; }
+    section[data-testid="stSidebar"] .block-container {
+        background: transparent; box-shadow: none; padding: 1.2rem 1rem; margin: 0; border-radius: 0;
+    }
+    .brand { font-size: 1.55rem; font-weight: 800; color: #BE185D; letter-spacing: -0.5px; font-family: 'Poppins', sans-serif; }
     .brand span { color: #EC4899; }
     .profile {
         display: flex; align-items: center; gap: 12px;
-        margin: 14px 0 18px 0; padding: 4px 2px;
+        margin: 12px 0 16px 0; padding: 10px 12px;
+        background: #FFFFFF; border-radius: 18px; border: 1px solid #F9C4DD;
+        box-shadow: 0 3px 10px rgba(190,24,93,.10);
     }
     .avatar {
-        width: 52px; height: 52px; border-radius: 50%;
-        background: linear-gradient(135deg, #F9A8D4, #BE185D);
-        display: flex; align-items: center; justify-content: center; font-size: 1.6rem;
+        width: 46px; height: 46px; border-radius: 50%;
+        background: linear-gradient(135deg, #F9A8D4, #DB2777);
+        display: flex; align-items: center; justify-content: center; font-size: 1.4rem;
         box-shadow: 0 2px 8px rgba(190,24,93,.3);
     }
-    .profile-nama { font-weight: 700; color: #3B0A24; line-height: 1.2; }
-    .profile-role { font-size: .8rem; color: #9D5C7C; }
+    .profile-nama { font-weight: 700; color: #4A1030; line-height: 1.2; font-size: .95rem; }
+    .profile-role { font-size: .78rem; color: #9D5C7C; }
+    .side-label {
+        font-size: .7rem; font-weight: 700; letter-spacing: 1.5px; color: #BE185D;
+        margin: 6px 0 4px 4px;
+    }
 
     /* Menu navigasi (st.radio) tampil seperti daftar menu */
     [data-testid="stSidebar"] [role="radiogroup"] { gap: 4px; }
     [data-testid="stSidebar"] [role="radiogroup"] label {
-        padding: 10px 14px; border-radius: 14px; width: 100%; cursor: pointer;
-        transition: background .15s;
+        padding: 9px 14px; border-radius: 14px; width: 100%; cursor: pointer;
+        transition: all .2s ease; border: 1px solid transparent;
     }
     [data-testid="stSidebar"] [role="radiogroup"] label > div:first-child { display: none; }
-    [data-testid="stSidebar"] [role="radiogroup"] label:hover { background: rgba(255,255,255,.55); }
+    [data-testid="stSidebar"] [role="radiogroup"] label p { color: #7A2A57; font-weight: 500; }
+    [data-testid="stSidebar"] [role="radiogroup"] label:hover { background: rgba(255,255,255,.75); transform: translateX(4px); }
     [data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) {
-        background: #FFF5F9; font-weight: 700;
-        box-shadow: 0 2px 8px rgba(190,24,93,.12);
+        background: linear-gradient(135deg, #EC4899, #DB2777); border-color: #DB2777;
+        box-shadow: 0 4px 12px rgba(219,39,119,.35);
+    }
+    [data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) p { color: #FFFFFF; font-weight: 700; }
+
+    /* Kotak "Isi Aplikasi" di sidebar */
+    .si-box { display: flex; flex-direction: column; gap: 7px; }
+    .si {
+        display: flex; align-items: flex-start; gap: 9px; padding: 7px 9px;
+        background: #FFFFFF; border: 1px solid #FBCFE8; border-radius: 12px;
+        transition: transform .2s ease, box-shadow .2s ease;
+    }
+    .si:hover { transform: translateX(3px); box-shadow: 0 3px 10px rgba(190,24,93,.15); }
+    .si-i { font-size: 1.15rem; line-height: 1.3; }
+    .si-t { display: flex; flex-direction: column; line-height: 1.25; }
+    .si-t b { font-size: .8rem; color: #831843; }
+    .si-t small { font-size: .7rem; color: #9D5C7C; }
+    .langkah {
+        font-size: .78rem; color: #831843; background: #FFFFFF; border: 1px dashed #F472B6;
+        border-radius: 12px; padding: 8px 10px; margin: 8px 0 4px 0; line-height: 1.5;
     }
 
-    /* ---------- Header ---------- */
-    .hello { font-size: 1.9rem; font-weight: 800; color: #5B1F42; letter-spacing: .5px; margin: 0; }
-    .hello-sub { color: #9D5C7C; margin: 2px 0 0 0; font-size: .98rem; }
-    .chip {
-        display: inline-block; background: #F7DCEA; color: #7A2A57; font-weight: 600;
-        border-radius: 999px; padding: 6px 14px; margin: 0 6px 6px 0; font-size: .85rem;
-        border: 1px solid #F3C4DC;
+    [data-testid="stExpander"] {
+        background: rgba(255,255,255,.65); border: 1px solid #F9C4DD !important; border-radius: 16px;
     }
+    [data-testid="stExpander"] summary p { font-weight: 700; color: #831843; }
+
+    /* ---------- Hero / header halaman ---------- */
+    .hero {
+        position: relative; overflow: hidden; border-radius: 24px; padding: 1.3rem 1.6rem; margin-bottom: 1.1rem;
+        background: linear-gradient(120deg, #F472B6, #EC4899, #DB2777, #F9A8D4);
+        background-size: 300% 300%; animation: geser 12s ease infinite, naik .6s both;
+        box-shadow: 0 10px 28px rgba(219,39,119,.30);
+    }
+    .hero::after {
+        content: ""; position: absolute; top: 0; left: 0; width: 40%; height: 100%;
+        background: linear-gradient(100deg, transparent, rgba(255,255,255,.28), transparent);
+        animation: kilau 5s ease-in-out infinite;
+    }
+    .hero-besar { padding: 2rem 2rem 1.6rem 2rem; }
+    .hello { font-size: 1.7rem; font-weight: 800; color: #FFFFFF !important; letter-spacing: .5px; margin: 0; position: relative; z-index: 2; }
+    .hero-besar .hello { font-size: 2.2rem; }
+    .hello-sub { color: #FFE4F1 !important; margin: 4px 0 0 0; font-size: .98rem; position: relative; z-index: 2; }
+    .chips { margin-top: 12px; position: relative; z-index: 2; }
+    .chip {
+        display: inline-block; background: rgba(255,255,255,.92); color: #BE185D; font-weight: 600;
+        border-radius: 999px; padding: 6px 14px; margin: 0 6px 6px 0; font-size: .82rem;
+        box-shadow: 0 2px 6px rgba(131,24,67,.15); transition: transform .2s ease;
+    }
+    .chip:hover { transform: translateY(-3px) scale(1.04); }
+    .bubble { position: absolute; font-size: 2rem; opacity: .55; animation: melayang 6s ease-in-out infinite; z-index: 1; }
+    .b1 { right: 6%; top: 12%; }
+    .b2 { right: 16%; bottom: 8%; animation-delay: 1.5s; font-size: 1.5rem; }
+    .b3 { right: 28%; top: 20%; animation-delay: 3s; font-size: 1.2rem; }
+
+    /* ---------- Tile fitur ---------- */
+    .judul-seksi { font-weight: 800; color: #831843; font-size: 1.1rem; margin: .6rem 0 .5rem 0; font-family: 'Poppins', sans-serif; }
+    .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 1rem; }
+    .tile {
+        background: linear-gradient(160deg, #FFFFFF 0%, #FFF0F7 100%); border: 1px solid #F9C4DD; border-radius: 18px;
+        padding: 14px 14px 12px 14px; animation: naik .6s both;
+        transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+    }
+    .tile:hover { transform: translateY(-6px); box-shadow: 0 12px 24px rgba(219,39,119,.22); border-color: #EC4899; }
+    .tile-i { font-size: 1.7rem; }
+    .tile-t { font-weight: 700; color: #831843; margin-top: 2px; font-size: .95rem; }
+    .tile-d { color: #9D5C7C; font-size: .78rem; line-height: 1.35; margin-top: 2px; }
 
     /* ---------- Kartu ---------- */
     [class*="st-key-card"] {
-        background: #FCE7F3; border: 1px solid #F5CDE2; border-radius: 22px;
-        padding: 1.1rem 1.3rem; box-shadow: 0 2px 10px rgba(190,24,93,.08);
+        background: #FFFFFF; border: 1px solid #F9C4DD; border-radius: 22px;
+        padding: 1.1rem 1.3rem; box-shadow: 0 4px 16px rgba(219,39,119,.10);
+        animation: naik .55s both; transition: box-shadow .25s ease, transform .25s ease;
+        border-top: 4px solid #EC4899;
     }
-    .card-title { font-weight: 700; color: #5B1F42; font-size: 1.02rem; margin-bottom: .4rem; }
+    [class*="st-key-card"]:hover { box-shadow: 0 10px 28px rgba(219,39,119,.20); }
+    .card-title { font-weight: 700; color: #831843; font-size: 1.02rem; margin-bottom: .4rem; font-family: 'Poppins', sans-serif; }
+
     div[data-testid="stMetric"] {
-        background: linear-gradient(135deg, #FFFFFF 0%, #FCE7F3 100%);
-        border: 1px solid #FBCFE8; border-radius: 16px;
+        background: linear-gradient(135deg, #FFFFFF 0%, #FFF0F7 100%);
+        border: 1px solid #FBCFE8; border-left: 5px solid #EC4899; border-radius: 16px;
         padding: 14px 18px; box-shadow: 0 2px 8px rgba(190,24,93,0.08);
+        transition: transform .2s ease, box-shadow .2s ease;
     }
+    div[data-testid="stMetric"]:hover { transform: translateY(-3px); box-shadow: 0 8px 18px rgba(190,24,93,.18); }
     div[data-testid="stMetric"] label,
-    div[data-testid="stMetric"] div { color: #3B0A24 !important; }
+    div[data-testid="stMetric"] div { color: #4A1030 !important; }
+
+    [data-testid="stDataFrame"] { border-radius: 14px; overflow: hidden; border: 1px solid #FBCFE8; }
+    [data-testid="stAlert"] { border-radius: 14px; }
+
+    /* ---------- Tombol ---------- */
+    [data-testid="stBaseButton-primary"], [data-testid="stBaseButton-primaryFormSubmit"] {
+        background: linear-gradient(135deg, #F472B6, #DB2777); border: none; color: #FFFFFF;
+        border-radius: 14px; font-weight: 700; transition: transform .2s ease, box-shadow .2s ease;
+    }
+    [data-testid="stBaseButton-primary"]:hover, [data-testid="stBaseButton-primaryFormSubmit"]:hover {
+        transform: translateY(-2px) scale(1.02); box-shadow: 0 8px 18px rgba(219,39,119,.40); color: #FFFFFF;
+    }
+    section[data-testid="stSidebar"] [data-testid="stBaseButton-primary"] { animation: denyut 2.4s ease-in-out infinite; }
+    [data-testid="stBaseButton-secondary"] {
+        background: #FFFFFF; border: 1.5px solid #F472B6; color: #BE185D; border-radius: 14px; font-weight: 600;
+    }
+    [data-testid="stBaseButton-secondary"]:hover { background: #FFF0F7; border-color: #DB2777; color: #9D174D; }
+
+    /* ---------- Input & dropdown (dropdown hanya bisa dipilih, tidak bisa diketik) ---------- */
+    div[data-baseweb="select"] > div {
+        background: #FFFFFF; border: 1.5px solid #F9A8D4; border-radius: 12px; cursor: pointer;
+        transition: border-color .2s ease, box-shadow .2s ease;
+    }
+    div[data-baseweb="select"] > div:hover { border-color: #EC4899; box-shadow: 0 0 0 3px rgba(236,72,153,.15); }
+    div[data-baseweb="select"] input { caret-color: transparent !important; pointer-events: none !important; cursor: pointer !important; }
+    div[data-baseweb="select"] * { cursor: pointer; }
+    div[data-baseweb="select"] span, div[data-baseweb="select"] div { color: #4A1030; }
+    div[data-baseweb="popover"] ul { background: #FFFFFF; }
+    div[data-baseweb="popover"] li:hover, div[data-baseweb="popover"] li[aria-selected="true"] { background: #FCE7F3 !important; }
+    div[data-baseweb="input"], div[data-baseweb="textarea"], div[data-baseweb="base-input"] {
+        border-radius: 12px; background: #FFFFFF;
+    }
+    div[data-baseweb="input"], div[data-baseweb="textarea"] { border: 1.5px solid #F9A8D4; }
+    div[data-baseweb="input"] input, div[data-baseweb="textarea"] textarea { background: #FFFFFF; color: #4A1030; }
+    div[data-baseweb="input"]:focus-within, div[data-baseweb="textarea"]:focus-within {
+        border-color: #EC4899; box-shadow: 0 0 0 3px rgba(236,72,153,.18);
+    }
+    div[data-testid="stSlider"] [role="slider"] { background-color: #EC4899 !important; }
+    div[data-testid="stSliderThumbValue"] { color: #BE185D !important; }
+
+    /* iframe pembantu (tinggi 0) disembunyikan dari tata letak */
+    [data-testid="stElementContainer"]:has(iframe[height="0"]), .element-container:has(iframe[height="0"]) {
+        height: 0; margin: 0; overflow: hidden; position: absolute;
+    }
 
     /* ---------- Panel skor (kanan) ---------- */
     .st-key-panel_kanan {
-        border: 1px solid #D9A9C4; border-radius: 26px; padding: 1rem;
-        background: #FBE3EF;
+        border: 1px solid #F9A8D4; border-radius: 26px; padding: 1rem;
+        background: linear-gradient(180deg, #FFF0F7, #FCE7F3); animation: naik .6s both;
     }
+    .panel-judul { font-weight: 800; color: #BE185D; text-align: center; margin-bottom: 10px; font-size: 1rem; font-family: 'Poppins', sans-serif; }
     .gauge-card {
-        background: linear-gradient(160deg, #A8688B 0%, #8E4F73 100%);
-        border-radius: 22px; padding: 16px 12px 14px 12px; margin-bottom: 14px;
-        text-align: center; color: #fff;
-        box-shadow: 0 3px 10px rgba(110, 40, 80, .25);
+        background: #FFFFFF; border: 1px solid #FBCFE8;
+        border-radius: 22px; padding: 14px 12px 12px 12px; margin-bottom: 12px;
+        text-align: center; color: #831843;
+        box-shadow: 0 3px 10px rgba(190,24,93,.12); animation: naik .6s both;
+        transition: transform .2s ease;
     }
-    .gauge-title { font-weight: 600; font-size: .95rem; opacity: .95; }
+    .gauge-card:hover { transform: scale(1.03); }
+    .gauge-card:nth-child(3) { animation-delay: .1s; }
+    .gauge-card:nth-child(4) { animation-delay: .2s; }
+    .gauge-title { font-weight: 700; font-size: .92rem; color: #BE185D; }
     .ring {
         width: 112px; height: 112px; border-radius: 50%; margin: 10px auto 4px auto;
         display: flex; align-items: center; justify-content: center; position: relative;
-        background: conic-gradient(var(--c) calc(var(--p) * 1%), rgba(255,255,255,.22) 0);
+        background: conic-gradient(var(--c) calc(var(--p) * 1%), #FCE7F3 0);
+        animation: isiCincin 1.4s ease-out;
     }
-    .ring::before {
-        content: ""; position: absolute; inset: 11px; border-radius: 50%; background: #9A5A7D;
+    .ring::before { content: ""; position: absolute; inset: 11px; border-radius: 50%; background: #FFFFFF; }
+    .ring span { position: relative; font-weight: 800; font-size: 1.2rem; color: #831843; }
+    .stat-num { font-size: 2rem; font-weight: 800; margin: 18px 0 14px 0; color: #DB2777; }
+    .panel-link { text-align: center; color: #BE185D; font-weight: 600; font-size: .88rem; }
+
+    @media (prefers-reduced-motion: reduce) {
+        * { animation: none !important; transition: none !important; }
     }
-    .ring span { position: relative; font-weight: 800; font-size: 1.2rem; color: #fff; }
-    .stat-num { font-size: 2rem; font-weight: 800; margin: 18px 0 14px 0; }
-    .panel-link { text-align: center; color: #7A2A57; font-weight: 600; font-size: .9rem; }
     </style>
     """,
     unsafe_allow_html=True,
+)
+
+# Kunci dropdown: input pencarian dibuat read-only agar user hanya memilih (tidak mengetik)
+components.html(
+    """
+    <script>
+    (function () {
+        const doc = window.parent.document;
+        function kunci() {
+            doc.querySelectorAll('div[data-baseweb="select"] input').forEach(function (el) {
+                el.setAttribute('readonly', 'true');
+                el.setAttribute('inputmode', 'none');
+            });
+        }
+        kunci();
+        if (!window.parent.__kunciSelect) {
+            window.parent.__kunciSelect = true;
+            new MutationObserver(kunci).observe(doc.body, { childList: true, subtree: true });
+        }
+    })();
+    </script>
+    """,
+    height=0,
 )
 
 # ------------------------------------------------------------
@@ -221,10 +385,30 @@ MODEL_GROQ_KANDIDAT = ["openai/gpt-oss-20b", "openai/gpt-oss-120b"]
 FITUR_IRIS = ["sepal_length", "sepal_width", "petal_length", "petal_width"]
 SPECIES_MAP = {"setosa": 0, "versicolor": 1, "virginica": 2}  # string -> integer
 SPECIES_LIST = list(SPECIES_MAP.keys())
-TEMA_GRAFIK = {"figure.facecolor": "#FFF5F9", "axes.facecolor": "#FFFFFF", "grid.color": "#FBCFE8"}
+TEMA_GRAFIK = {"figure.facecolor": "#FFFFFF", "axes.facecolor": "#FFFFFF", "grid.color": "#FCE7F3"}
+PALET_KLASTER = ["#EC4899", "#8B5CF6", "#14B8A6", "#F59E0B", "#3B82F6",
+                 "#EF4444", "#84CC16", "#06B6D4", "#A855F7", "#F97316"]
 WIB = timedelta(hours=7)  # selisih UTC -> WIB untuk tampilan waktu
 
 MENU = ["🏠 Dashboard", "📈 Visualisasi", "📋 Evaluasi", "🗄️ Database & Retrain", "💬 Komentar"]
+MENU_DESKRIPSI = {
+    MENU[0]: "Ringkasan dataset, status model, dan skor utama.",
+    MENU[1]: "Grafik hasil: scatter, confusion matrix, klaster, kurva loss.",
+    MENU[2]: "Metrik lengkap dan classification report.",
+    MENU[3]: "Tambah/hapus data Iris di MongoDB, lalu retrain Random Forest.",
+    MENU[4]: "Komentar publik tersimpan di MongoDB + analisa AI Groq.",
+}
+
+# Daftar fitur untuk sidebar dan dashboard (ikon, judul, deskripsi singkat)
+FITUR_APP = [
+    ("📈", "Regresi", "Linear, Ridge, Lasso, Tree, Forest, Neural Net"),
+    ("🧩", "Klasifikasi", "Logistic, KNN, Tree, Forest, SVM, Neural Net"),
+    ("🔵", "Clustering", "KMeans, Agglomerative, DBSCAN, GMM + PCA 2D"),
+    ("🧠", "Deep Learning", "Neural Network PyTorch + kurva loss per epoch"),
+    ("📚", "Dataset", "sklearn, UCI Repository, dan USGS real-time"),
+    ("🗄️", "MongoDB", "Tambah/hapus data Iris dan retrain Random Forest"),
+    ("💬", "Komentar + AI", "Komentar publik, ringkasan & sentimen LLM Groq"),
+]
 
 
 # ------------------------------------------------------------
@@ -575,7 +759,8 @@ def analisa_komentar(daftar_teks: tuple) -> dict:
 
 
 # ------------------------------------------------------------
-# 🧱 Helper tampilan (kartu, header, gauge)
+# 🧱 Helper tampilan (kartu, header, tile, gauge)
+# Catatan: string HTML ditulis satu baris (tanpa indentasi) agar tidak dianggap blok kode markdown
 # ------------------------------------------------------------
 def kartu(nama: str):
     """Container bergaya kartu (di-style lewat CSS dengan key 'card_*')."""
@@ -586,10 +771,38 @@ def judul_kartu(teks: str):
     st.markdown(f'<div class="card-title">{teks}</div>', unsafe_allow_html=True)
 
 
-def header_halaman(judul: str, sub: str, chips: list | None = None):
-    st.markdown(f'<p class="hello">{judul}</p><p class="hello-sub">{sub}</p>', unsafe_allow_html=True)
+def header_halaman(judul: str, sub: str, chips: list | None = None, besar: bool = False):
+    """Banner hero beranimasi di bagian atas tiap halaman."""
+    kelas = "hero hero-besar" if besar else "hero"
+    chip_html = ""
     if chips:
-        st.markdown("".join(f'<span class="chip">{c}</span>' for c in chips), unsafe_allow_html=True)
+        chip_html = '<div class="chips">' + "".join(f'<span class="chip">{c}</span>' for c in chips) + "</div>"
+    st.markdown(
+        f'<div class="{kelas}"><span class="bubble b1">🌸</span><span class="bubble b2">✨</span>'
+        f'<span class="bubble b3">💗</span><p class="hello">{judul}</p><p class="hello-sub">{sub}</p>'
+        f"{chip_html}</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def tiles_html() -> str:
+    """Grid kartu fitur aplikasi untuk Dashboard."""
+    isi = "".join(
+        f'<div class="tile" style="animation-delay:{i * 0.07:.2f}s"><div class="tile-i">{ik}</div>'
+        f'<div class="tile-t">{jd}</div><div class="tile-d">{ds}</div></div>'
+        for i, (ik, jd, ds) in enumerate(FITUR_APP)
+    )
+    return f'<div class="tiles">{isi}</div>'
+
+
+def info_sidebar_html() -> str:
+    """Daftar ringkas isi aplikasi untuk sidebar."""
+    isi = "".join(
+        f'<div class="si"><span class="si-i">{ik}</span>'
+        f'<span class="si-t"><b>{jd}</b><small>{ds}</small></span></div>'
+        for ik, jd, ds in FITUR_APP
+    )
+    return f'<div class="si-box">{isi}</div>'
 
 
 def gauge_html(judul: str, pct, teks: str, warna: str) -> str:
@@ -638,7 +851,7 @@ if "hasil_retrain" not in st.session_state:
     st.session_state.hasil_retrain = None
 
 # ------------------------------------------------------------
-# 🎛️ Sidebar: brand, profil, menu, pengaturan, tombol train
+# 🎛️ Sidebar: brand, profil, menu, isi aplikasi, pengaturan, tombol train
 # ------------------------------------------------------------
 with st.sidebar:
     st.markdown('<div class="brand">Machine<span>·</span>Learning</div>', unsafe_allow_html=True)
@@ -649,9 +862,18 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
+    st.markdown('<div class="side-label">MENU</div>', unsafe_allow_html=True)
     halaman = st.radio("Menu", MENU, label_visibility="collapsed", key="halaman")
+    st.caption(f"ℹ️ {MENU_DESKRIPSI[halaman]}")
 
-    st.divider()
+    with st.expander("✨ Isi Aplikasi", expanded=True):
+        st.markdown(info_sidebar_html(), unsafe_allow_html=True)
+        st.markdown(
+            '<div class="langkah"><b>Cara pakai:</b><br>① Pilih jenis tugas<br>'
+            '② Pilih dataset &amp; model<br>③ Klik 🚀 Train Model</div>',
+            unsafe_allow_html=True,
+        )
+
     with st.expander("⚙️ Pengaturan Model", expanded=True):
         tugas = st.radio("🎯 Jenis Tugas", ["Regresi", "Klasifikasi", "Clustering"])
 
@@ -690,7 +912,7 @@ with st.sidebar:
         random_state = st.number_input("🎲 Random State", min_value=0, max_value=9999, value=42, step=1)
 
     tombol_latih = st.button("🚀 Train Model", use_container_width=True, type="primary")
-    st.caption("Dibuat dengan ❤️ menggunakan Streamlit, scikit-learn & PyTorch")
+    st.caption("Dibuat oleh Hanum Iman Azzahra (562024006) menggunakan Streamlit, scikit-learn & PyTorch ❤️")
 
 # Muat data (di-cache); beri pesan jelas bila unduhan UCI/USGS gagal
 try:
@@ -823,15 +1045,17 @@ def render_visualisasi(hasil, ringkas: bool = False):
         nama_label = ["Noise" if l == -1 else f"Klaster {l}" for l in hasil["labels"]]
         df_plot = pd.DataFrame({"PC1": hasil["Z"][:, 0], "PC2": hasil["Z"][:, 1], "Klaster": nama_label})
         urutan = sorted(set(nama_label), key=lambda s: (s == "Noise", s))
-        warna = sns.color_palette("tab10", n_colors=max(len(urutan), 3))
-        palet = {nm: ("#9CA3AF" if nm == "Noise" else warna[i]) for i, nm in enumerate(urutan)}
+        palet = {
+            nm: ("#9CA3AF" if nm == "Noise" else PALET_KLASTER[i % len(PALET_KLASTER)])
+            for i, nm in enumerate(urutan)
+        }
 
         def gambar_scatter():
             st.subheader("🔵 Sebaran Klaster (PCA 2D)")
             fig, ax = plt.subplots(figsize=(7 * sk, 5.5 * sk))
             sns.scatterplot(
                 data=df_plot, x="PC1", y="PC2", hue="Klaster", hue_order=urutan,
-                palette=palet, s=60, alpha=0.8, edgecolor="white", ax=ax,
+                palette=palet, s=60, alpha=0.85, edgecolor="white", ax=ax,
             )
             if hasil["pusat"] is not None:
                 ax.scatter(hasil["pusat"][:, 0], hasil["pusat"][:, 1], c="black", marker="X",
@@ -1248,13 +1472,16 @@ def render_komentar():
 # 🧭 Routing halaman sesuai menu sidebar
 # ------------------------------------------------------------
 if halaman == MENU[0]:
-    # ===== Dashboard: kolom utama (kiri) + panel skor (kanan) =====
+    # ===== Dashboard: hero + fitur + kolom utama (kiri) + panel skor (kanan) =====
     header_halaman(
         "HALO, SELAMAT DATANG! 👋",
         "Regresi, Klasifikasi, dan Clustering secara interaktif ✨",
         [f"🎯 {tugas}", f"📚 {nama_dataset}", f"🧩 {nama_model}", f"🎲 Seed {int(random_state)}"],
+        besar=True,
     )
-    st.write("")
+
+    st.markdown('<div class="judul-seksi">✨ Fitur Aplikasi</div>', unsafe_allow_html=True)
+    st.markdown(tiles_html(), unsafe_allow_html=True)
 
     utama, panel = st.columns([3, 1.05], gap="large")
 
@@ -1285,32 +1512,30 @@ if halaman == MENU[0]:
 
     with panel:
         with st.container(key="panel_kanan"):
-            warna = ["#F9A8D4", "#5EEAD4", "#FCD34D"]
+            warna = ["#EC4899", "#F472B6", "#BE185D"]
             kartu_skor = "".join(
                 gauge_html(j, p, t, warna[i]) for i, (j, p, t) in enumerate(skor_ringkas(hasil))
             )
-            st.markdown(kartu_skor, unsafe_allow_html=True)
-            st.markdown('<div class="panel-link">Lihat detail di menu 📋 Evaluasi</div>',
-                        unsafe_allow_html=True)
+            st.markdown(
+                '<div class="panel-judul">🎯 Skor Model</div>' + kartu_skor
+                + '<div class="panel-link">Lihat detail di menu 📋 Evaluasi</div>',
+                unsafe_allow_html=True,
+            )
 
 elif halaman == MENU[1]:
     header_halaman("📈 VISUALISASI", "Grafik hasil model terakhir yang dilatih.")
-    st.write("")
     with kartu("visual"):
         render_visualisasi(hasil)
 
 elif halaman == MENU[2]:
     header_halaman("📋 EVALUASI", "Metrik performa model terakhir yang dilatih.")
-    st.write("")
     with kartu("eval"):
         render_evaluasi(hasil)
 
 elif halaman == MENU[3]:
     header_halaman("🗄️ DATABASE & RETRAIN", "Kelola data Iris di MongoDB dan latih ulang Random Forest.")
-    st.write("")
     render_database()
 
 else:
-    header_halaman("💬 KOMENTAR", "Komentar pengunjung tersimpan di MongoDB.")
-    st.write("")
+    header_halaman("💬 KOMENTAR", "Komentar pengunjung tersimpan di MongoDB, lengkap dengan analisa AI Groq.")
     render_komentar()
